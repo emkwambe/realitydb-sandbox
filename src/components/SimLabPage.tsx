@@ -206,31 +206,8 @@ export function SimLabPage({ onClose, onGallery }: Props) {
           </div>
         </section>
 
-        {/* Workflow */}
-        <section className="max-w-4xl mx-auto px-6 pb-10">
-          <h2 className="text-xs text-[#64748b] uppercase tracking-wider text-center mb-5">How it works</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {WORKFLOW_STEPS.map((step, i) => {
-              const stepId = ['templates', 'connection', 'connection', 'connection', 'connection'][i];
-              const isActive = i === 0 ? !connectionString : i === 1 ? !!connectionString : false;
-              return (
-                <button key={i}
-                  onClick={() => {
-                    const el = document.getElementById(stepId);
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className={`bg-[#0f1117] border rounded-lg p-3 text-center transition-all cursor-pointer hover:border-[#fbbf24]/50 ${
-                    isActive ? 'border-[#fbbf24] bg-[#fbbf24]/5' : 'border-[#1e293b]'
-                  }`}>
-                  <span className="text-xl block mb-1">{step.icon}</span>
-                  <p className="text-xs font-semibold text-white mb-1">{step.title}</p>
-                  <p className="text-[10px] text-[#64748b] leading-relaxed">{step.description}</p>
-                  {isActive && <span className="block mt-1 text-[9px] text-[#fbbf24] font-semibold">Current step</span>}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        {/* Workflow steps now live in the sticky left column of the two-column
+            split below (see "How it works" inside the Template Selection section). */}
 
         {/* Active Labs */}
         {activeLabs.length > 0 && (
@@ -302,8 +279,42 @@ export function SimLabPage({ onClose, onGallery }: Props) {
           </section>
         )}
 
+        {/* Two-column split: sticky "How it works" steps (left) + scrollable
+            template selection / row size / launch (right). */}
+        <section className="max-w-6xl mx-auto px-6 pb-8 lg:grid lg:grid-cols-[300px_1fr] lg:gap-6 lg:items-start">
+          {/* LEFT: How it works — sticky on desktop, horizontal scroll bar on mobile */}
+          <div className="mb-6 lg:mb-0 lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto lg:py-2">
+            <h2 className="text-xs text-[#64748b] uppercase tracking-wider mb-3">How it works</h2>
+            <div className="flex flex-row gap-3 overflow-x-auto pb-2 lg:flex-col lg:overflow-x-visible lg:pb-0">
+              {WORKFLOW_STEPS.map((step, i) => {
+                const stepId = ['templates', 'connection', 'connection', 'connection', 'connection'][i];
+                const isActive = i === 0 ? !connectionString : i === 1 ? !!connectionString : false;
+                return (
+                  <button key={i}
+                    onClick={() => {
+                      const el = document.getElementById(stepId);
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className={`w-44 shrink-0 lg:w-auto lg:shrink bg-[#0f1117] border rounded-lg p-3 text-left transition-all cursor-pointer hover:border-[#fbbf24]/50 ${
+                      isActive ? 'border-[#fbbf24] bg-[#fbbf24]/5' : 'border-[#1e293b]'
+                    }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">{step.icon}</span>
+                      <p className="text-xs font-semibold text-white">{step.title}</p>
+                      <span className="ml-auto text-[9px] font-mono text-[#64748b]">{String(i + 1).padStart(2, '0')}</span>
+                    </div>
+                    <p className="text-[10px] text-[#64748b] leading-relaxed">{step.description}</p>
+                    {isActive && <span className="mt-1 block text-[9px] text-[#fbbf24] font-semibold">Current step</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* RIGHT: template selection + row size + launch */}
+          <div className="min-w-0">
         {/* Template Selection */}
-        <section id="templates" className="max-w-4xl mx-auto px-6 pb-8">
+        <section id="templates" className="pb-8">
           <h2 className="text-sm font-semibold text-white mb-1">Select a Template</h2>
           <p className="text-[10px] text-[#64748b] mb-4">
             {templates.length} production-realistic schemas &middot; All with FK integrity, temporal ordering, lifecycle rules
@@ -346,7 +357,7 @@ export function SimLabPage({ onClose, onGallery }: Props) {
 
         {/* Row Size + Launch */}
         {selectedTemplate && (
-          <section className="max-w-4xl mx-auto px-6 pb-8">
+          <section className="pb-2">
             <div className="bg-[#0f1117] border border-[#1e293b] rounded-xl p-5">
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-xl">{meta?.icon}</span>
@@ -395,6 +406,8 @@ export function SimLabPage({ onClose, onGallery }: Props) {
             </div>
           </section>
         )}
+          </div>
+        </section>
 
         {/* Pricing */}
         <section className="max-w-4xl mx-auto px-6 pb-12">
