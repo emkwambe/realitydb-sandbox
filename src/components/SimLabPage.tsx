@@ -2,7 +2,7 @@
 // Replaces the inline 4-template selector in App.tsx
 // Fetches templates from Lab API, explains workflow, shows pricing
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 // @ts-ignore - SimLabV3 is a JSX file
@@ -329,8 +329,8 @@ export function SimLabPage({ onClose, onGallery }: Props) {
                 if (!m) return null;
                 const isSelected = selectedTemplate === t.template;
                 return (
+                  <Fragment key={t.template}>
                   <button
-                    key={t.template}
                     onClick={() => { setSelectedTemplate(t.template); setConnectionString(''); setError(''); }}
                     className={`border rounded-xl p-4 text-left transition-all ${
                       isSelected
@@ -349,63 +349,64 @@ export function SimLabPage({ onClose, onGallery }: Props) {
                     <p className="text-[10px] text-[#94a3b8] mb-2">{m.description}</p>
                     <p className="text-[9px] text-[#64748b]">{m.tables} tables &middot; 5K rows free</p>
                   </button>
+                  {isSelected && (
+                    <div className="col-span-full">
+                      {/* Row Size + Launch — inline, immediately below the selected card */}
+                      <div className="bg-[#0f1117] border border-[#1e293b] rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="text-xl">{m.icon}</span>
+                          <div>
+                            <h3 className="text-sm font-bold text-white">{m.name}</h3>
+                            <p className="text-[10px] text-[#64748b]">{m.tables} tables &middot; {m.description}</p>
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">Select size</p>
+                        <div className="flex gap-2 mb-4 flex-wrap">
+                          {ROW_OPTIONS.map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setSelectedRows(opt.value)}
+                              className={`px-3 py-2 rounded-lg text-xs transition-all ${
+                                selectedRows === opt.value
+                                  ? 'bg-[#fbbf24]/10 border-2 border-[#fbbf24] text-white font-semibold'
+                                  : 'bg-[#0a0c10] border border-[#1e293b] text-[#94a3b8] hover:border-[#334155]'
+                              }`}
+                            >
+                              {opt.label}
+                              <span className="block text-[9px] mt-0.5" style={{ color: opt.tierColor }}>{opt.tier}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <button
+                            onClick={handleLaunch}
+                            disabled={provisioning}
+                            className="px-5 py-2.5 bg-[#fbbf24] text-black text-sm font-semibold rounded-lg hover:bg-[#fbbf24]/90 transition-colors disabled:opacity-50"
+                          >
+                            {provisioning ? 'Creating database...' : `Launch ${m.name} (${selectedRows >= 1000 ? selectedRows/1000 + 'K' : selectedRows} rows)`}
+                          </button>
+                          <div className="text-[10px] text-[#64748b]">
+                            Auto-expires in 4 hours &middot; Extendable &middot; Neon PostgreSQL 16
+                          </div>
+                        </div>
+
+                        {error && (
+                          <div className="mt-3 p-3 bg-[#ef4444]/10 border border-[#ef4444]/30 rounded-lg text-xs text-[#ef4444]">
+                            {error}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  </Fragment>
                 );
               })}
             </div>
           )}
         </section>
 
-        {/* Row Size + Launch */}
-        {selectedTemplate && (
-          <section className="pb-2">
-            <div className="bg-[#0f1117] border border-[#1e293b] rounded-xl p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-xl">{meta?.icon}</span>
-                <div>
-                  <h3 className="text-sm font-bold text-white">{meta?.name}</h3>
-                  <p className="text-[10px] text-[#64748b]">{meta?.tables} tables &middot; {meta?.description}</p>
-                </div>
-              </div>
-
-              <p className="text-[10px] text-[#64748b] uppercase tracking-wider mb-2">Select size</p>
-              <div className="flex gap-2 mb-4 flex-wrap">
-                {ROW_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setSelectedRows(opt.value)}
-                    className={`px-3 py-2 rounded-lg text-xs transition-all ${
-                      selectedRows === opt.value
-                        ? 'bg-[#fbbf24]/10 border-2 border-[#fbbf24] text-white font-semibold'
-                        : 'bg-[#0a0c10] border border-[#1e293b] text-[#94a3b8] hover:border-[#334155]'
-                    }`}
-                  >
-                    {opt.label}
-                    <span className="block text-[9px] mt-0.5" style={{ color: opt.tierColor }}>{opt.tier}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  onClick={handleLaunch}
-                  disabled={provisioning}
-                  className="px-5 py-2.5 bg-[#fbbf24] text-black text-sm font-semibold rounded-lg hover:bg-[#fbbf24]/90 transition-colors disabled:opacity-50"
-                >
-                  {provisioning ? 'Creating database...' : `Launch ${meta?.name} (${selectedRows >= 1000 ? selectedRows/1000 + 'K' : selectedRows} rows)`}
-                </button>
-                <div className="text-[10px] text-[#64748b]">
-                  Auto-expires in 4 hours &middot; Extendable &middot; Neon PostgreSQL 16
-                </div>
-              </div>
-
-              {error && (
-                <div className="mt-3 p-3 bg-[#ef4444]/10 border border-[#ef4444]/30 rounded-lg text-xs text-[#ef4444]">
-                  {error}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
           </div>
         </section>
 
