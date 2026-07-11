@@ -451,7 +451,8 @@ export default function SimLab({ onClose, onGallery }) {
           title: snapTitle.trim(),
           authors: "api-user",
           description: snapDesc.trim() || undefined,
-          tags,
+          // Send tags as a comma-string (the /v1/publish D1 bind expects a scalar).
+          tags: Array.isArray(tags) ? tags.join(",") : (tags ?? ""),
           license: snapLicense,
         }),
       });
