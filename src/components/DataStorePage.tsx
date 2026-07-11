@@ -191,7 +191,7 @@ export function DataStorePage({ onClose, onNavigate }: Props) {
                           >
                             Q{meta.quality}
                           </span>
-                          <span className="text-[10px] text-[var(--muted)]">{meta.tables} tables</span>
+                          <span className="text-[10px] text-[var(--muted)]">&middot; {meta.tables} tables</span>
                         </div>
                         <p className="text-[10px] text-[var(--muted)] mt-0.5 truncate">{meta.description}</p>
                       </div>

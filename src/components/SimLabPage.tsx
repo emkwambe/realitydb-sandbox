@@ -182,7 +182,7 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
         <span className="text-[#64748b] text-sm">Disposable Cloud PostgreSQL</span>
         <span className="ml-auto flex gap-2 items-center">
           <button onClick={() => setShowManage(true)} className="text-[10px] text-[#06d6a0] border border-[#06d6a0]/30 rounded px-2 py-1 hover:bg-[#06d6a0]/10">
-            Manage Labs
+            Open SimLab &rarr;
           </button>
           {onGallery && (
             <button onClick={onGallery} className="text-[10px] text-[#22d3ee] border border-[#22d3ee]/30 rounded px-2 py-1 hover:bg-[#22d3ee]/10">
