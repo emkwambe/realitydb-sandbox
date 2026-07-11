@@ -1,5 +1,5 @@
 // App.tsx — RealityDB SimLab platform shell.
-// Clean hash-routed SPA: home / data-store / simlab / pricing.
+// Clean hash-routed SPA: home / data-store / simlab / gallery / pricing.
 // Copied product components (DataStorePage, SimLabPage) are used UNMODIFIED —
 // App adapts to their existing prop signatures (onClose / onGallery).
 
@@ -9,10 +9,11 @@ import { SimLabHomePage } from './components/SimLabHomePage';
 import { SimLabPricingPage } from './components/SimLabPricingPage';
 import { DataStorePage } from './components/DataStorePage';
 import { SimLabPage } from './components/SimLabPage';
+import { GalleryPage } from './components/GalleryPage';
 
-type Route = 'home' | 'data-store' | 'simlab' | 'pricing';
+type Route = 'home' | 'data-store' | 'simlab' | 'gallery' | 'pricing';
 
-const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'pricing'];
+const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'gallery', 'pricing'];
 
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '') as Route;
@@ -22,6 +23,7 @@ function routeFromHash(): Route {
 const NAV_ITEMS: { id: Route; label: string }[] = [
   { id: 'data-store', label: 'Data Store' },
   { id: 'simlab', label: 'SimLab' },
+  { id: 'gallery', label: 'Gallery' },
   { id: 'pricing', label: 'Pricing' },
 ];
 
@@ -130,8 +132,8 @@ function Shell() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  // DataStorePage and SimLabPage are full-screen fixed overlays with their own
-  // headers; they cover the navbar by design. Home/Pricing render under the navbar.
+  // DataStorePage, SimLabPage and GalleryPage are full-screen fixed overlays with
+  // their own headers; they cover the navbar by design. Home/Pricing render under it.
   const showNavbar = route === 'home' || route === 'pricing';
 
   return (
@@ -141,14 +143,11 @@ function Shell() {
       {route === 'home' && <SimLabHomePage onNavigate={navigate} />}
       {route === 'pricing' && <SimLabPricingPage />}
       {route === 'data-store' && <DataStorePage onClose={() => navigate('home')} />}
+      {route === 'gallery' && <GalleryPage onClose={() => navigate('home')} />}
       {route === 'simlab' && (
-        // TODO(gallery): No GalleryPage component was copied into this repo, so
-        // "Lab Gallery" points at the SimLab tab (which lists active labs) as the
-        // closest equivalent. Add a 'gallery' route + GalleryPage and swap this to
-        // navigate('gallery') once the gallery view is brought over.
         <SimLabPage
           onClose={() => navigate('home')}
-          onGallery={() => navigate('simlab')}
+          onGallery={() => navigate('gallery')}
         />
       )}
     </div>
