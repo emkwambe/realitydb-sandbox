@@ -40,9 +40,10 @@ const FORMAT_OPTIONS = [
 
 interface Props {
   onClose: () => void;
+  onNavigate?: (route: string, params?: Record<string, unknown>) => void;
 }
 
-export function DataStorePage({ onClose }: Props) {
+export function DataStorePage({ onClose, onNavigate }: Props) {
   const { user } = useAuth();
   const [templates, setTemplates] = useState<string[]>([]);
   const [templateSizes, setTemplateSizes] = useState<Record<string, TemplateSizes>>({});
@@ -201,6 +202,15 @@ export function DataStorePage({ onClose }: Props) {
                         className="px-3 py-1.5 text-[10px] font-semibold text-[#00e5a0] border border-[#00e5a0]/30 rounded-lg hover:bg-[#00e5a0]/10 transition-colors shrink-0 flex items-center gap-1"
                       >
                         <span>{'⬇'}</span> Free 5K
+                      </button>
+
+                      {/* Load into SimLab — the Data Store → SimLab trio connection */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onNavigate?.('simlab', { template, rows: 5000, source: 'data-store' }); }}
+                        className="px-3 py-1.5 text-[10px] font-semibold rounded-lg transition-opacity hover:opacity-90 shrink-0 whitespace-nowrap"
+                        style={{ backgroundColor: '#f59e0b', color: '#0a0a12' }}
+                      >
+                        ⚡ Load in SimLab →
                       </button>
 
                       <span className="text-[var(--muted)] text-xs">{isExpanded ? '▲' : '▼'}</span>

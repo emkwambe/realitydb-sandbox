@@ -118,10 +118,12 @@ function Navbar({
 
 function Shell() {
   const [route, setRoute] = useState<Route>(routeFromHash);
+  const [routeParams, setRouteParams] = useState<Record<string, unknown>>({});
 
-  const navigate = useCallback((r: Route) => {
+  const navigate = useCallback((r: Route, params?: Record<string, unknown>) => {
     window.location.hash = r === 'home' ? '' : r;
     setRoute(r);
+    setRouteParams(params ?? {});
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -142,12 +144,19 @@ function Shell() {
 
       {route === 'home' && <SimLabHomePage onNavigate={navigate} />}
       {route === 'pricing' && <SimLabPricingPage />}
-      {route === 'data-store' && <DataStorePage onClose={() => navigate('home')} />}
+      {route === 'data-store' && (
+        <DataStorePage
+          onClose={() => navigate('home')}
+          onNavigate={(r, params) => navigate(r as Route, params)}
+        />
+      )}
       {route === 'gallery' && <GalleryPage onClose={() => navigate('home')} />}
       {route === 'simlab' && (
         <SimLabPage
           onClose={() => navigate('home')}
           onGallery={() => navigate('gallery')}
+          preloadTemplate={routeParams.template as string | undefined}
+          preloadRows={routeParams.rows as number | undefined}
         />
       )}
     </div>

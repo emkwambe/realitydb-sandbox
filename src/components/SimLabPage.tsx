@@ -70,9 +70,11 @@ function formatTimeRemaining(expiresAt: string): string {
 interface Props {
   onClose: () => void;
   onGallery?: () => void;
+  preloadTemplate?: string;
+  preloadRows?: number;
 }
 
-export function SimLabPage({ onClose, onGallery }: Props) {
+export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }: Props) {
   const { user } = useAuth();
   const [templates, setTemplates] = useState<StoreTemplate[]>([]);
   const [activeLabs, setActiveLabs] = useState<ActiveLab[]>([]);
@@ -109,6 +111,14 @@ export function SimLabPage({ onClose, onGallery }: Props) {
       })
       .catch(() => {});
   }, [user]);
+
+  // Preselect template + row count when arriving from the Data Store ("Load in SimLab").
+  useEffect(() => {
+    if (preloadTemplate) {
+      setSelectedTemplate(preloadTemplate);
+      if (preloadRows) setSelectedRows(preloadRows);
+    }
+  }, [preloadTemplate, preloadRows]);
 
   const handleLaunch = async () => {
     if (!user) { setShowAuth(true); return; }
