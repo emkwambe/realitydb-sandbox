@@ -1,8 +1,13 @@
-// SimLabPricingPage.tsx — informational SimLab pricing (4 tiers).
-// No Stripe/Dodo wiring. CTAs are external links / mailto only.
-// Full pricing and checkout live at realitydb.dev/pricing.
+// SimLabPricingPage.tsx — SimLab pricing (5 tiers).
+// Data/Professional/Team CTAs open Dodo checkout in-app.
+// Community links to npm install; Enterprise EU is mailto.
 
+import { useState } from 'react';
 import { Check, ArrowRight } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import AuthModal from './AuthModal';
+
+const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || 'https://realitydb-lab-api.eddy-078.workers.dev';
 
 interface Tier {
   name: string;
@@ -11,7 +16,7 @@ interface Tier {
   color: string;
   highlight?: boolean;
   features: string[];
-  cta: { label: string; href: string };
+  cta: { label: string; href: string; productId?: string };
 }
 
 const TIERS: Tier[] = [
@@ -40,7 +45,7 @@ const TIERS: Tier[] = [
       'seed:supabase',
       'Priority download',
     ],
-    cta: { label: 'Get Started', href: 'https://realitydb.dev/pricing' },
+    cta: { label: 'Get Started', href: 'https://realitydb.dev/pricing', productId: 'pdt_0Nirf6Mx6bpCNmvw95xUp' },
   },
   {
     name: 'Professional',
@@ -56,7 +61,22 @@ const TIERS: Tier[] = [
       'examine bias + attest sign',
       'Priority support',
     ],
-    cta: { label: 'Get Started', href: 'https://realitydb.dev/pricing' },
+    cta: { label: 'Get Started', href: 'https://realitydb.dev/pricing', productId: 'pdt_0NirfGsVdeTfxs1dDREhp' },
+  },
+  {
+    name: 'Team',
+    price: '$99',
+    cadence: '/mo',
+    color: '#f472b6',
+    features: [
+      '30 concurrent active labs',
+      'Shared labs',
+      'Role management',
+      '48-hour TTL',
+      'API access',
+      'Cancel anytime',
+    ],
+    cta: { label: 'Get Started', href: 'https://realitydb.dev/pricing', productId: 'pdt_0NiwqEQox4EwJqXvnhSph' },
   },
   {
     name: 'Enterprise EU',
@@ -74,6 +94,38 @@ const TIERS: Tier[] = [
 ];
 
 export function SimLabPricingPage() {
+  const { user } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
+
+  async function handleCheckout(productId: string) {
+    if (!user) {
+      setShowAuth(true);
+      return;
+    }
+    try {
+      const res = await fetch(`${LAB_API_URL}/v1/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: productId,
+          user_email: user.email,
+          success_url: `${window.location.origin}/#pricing?purchase=success`,
+          cancel_url: `${window.location.origin}/#pricing`,
+        }),
+      });
+      const data = await res.json() as { checkout_url?: string; error?: string };
+      if (!res.ok || !data.checkout_url) {
+        console.error('Checkout error:', data.error);
+        alert('Checkout unavailable. Please try again.');
+        return;
+      }
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      console.error('Checkout error:', err);
+      alert('Checkout unavailable. Please try again.');
+    }
+  }
+
   return (
     <div className="min-h-screen bg-bg text-gray-200">
       <section className="mx-auto max-w-3xl px-6 pb-8 pt-20 text-center">
@@ -123,15 +175,25 @@ export function SimLabPricingPage() {
                   </li>
                 ))}
               </ul>
-              <a
-                href={tier.cta.href}
-                target={tier.cta.href.startsWith('mailto:') ? undefined : '_blank'}
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ backgroundColor: tier.color, color: '#000' }}
-              >
-                {tier.cta.label} <ArrowRight className="h-4 w-4" />
-              </a>
+              {tier.cta.productId ? (
+                <button
+                  onClick={() => handleCheckout(tier.cta.productId!)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: tier.color, color: '#000' }}
+                >
+                  {tier.cta.label} <ArrowRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <a
+                  href={tier.cta.href}
+                  target={tier.cta.href.startsWith('mailto:') ? undefined : '_blank'}
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: tier.color, color: '#000' }}
+                >
+                  {tier.cta.label} <ArrowRight className="h-4 w-4" />
+                </a>
+              )}
             </div>
           ))}
         </div>
@@ -158,6 +220,8 @@ export function SimLabPricingPage() {
           Mpingo Systems LLC — Precision Tools built to stay.
         </p>
       </footer>
+
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} />
     </div>
   );
 }

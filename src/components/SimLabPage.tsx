@@ -83,6 +83,7 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
   const [selectedRows, setSelectedRows] = useState(5000);
   const [provisioning, setProvisioning] = useState(false);
   const [error, setError] = useState('');
+  const [upgradeInfo, setUpgradeInfo] = useState<{ message: string; tier: string } | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const [connectionString, setConnectionString] = useState('');
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
@@ -126,17 +127,22 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
 
     setProvisioning(true);
     setError('');
+    setUpgradeInfo(null);
 
     try {
       const res = await fetch(`${LAB_API_URL}/v1/labs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': LAB_API_KEY },
-        body: JSON.stringify({ template: selectedTemplate, rows: selectedRows }),
+        body: JSON.stringify({ template: selectedTemplate, rows: selectedRows, userId: user.id }),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-        setError(err.error || `Failed to create lab (${res.status})`);
+        if (res.status === 403 && err.upgradeRequired) {
+          setUpgradeInfo({ message: err.error, tier: err.tier || 'free' });
+        } else {
+          setError(err.error || `Failed to create lab (${res.status})`);
+        }
         setProvisioning(false);
         return;
       }
@@ -405,6 +411,18 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
                         {error && (
                           <div className="mt-3 p-3 bg-[#ef4444]/10 border border-[#ef4444]/30 rounded-lg text-xs text-[#ef4444]">
                             {error}
+                          </div>
+                        )}
+
+                        {upgradeInfo && (
+                          <div className="mt-3 p-3 bg-[#fbbf24]/10 border border-[#fbbf24]/30 rounded-lg text-xs text-[#fbbf24] flex items-center justify-between gap-3">
+                            <span>{upgradeInfo.message}</span>
+                            <a
+                              href="#pricing"
+                              className="shrink-0 px-3 py-1.5 bg-[#fbbf24] text-black text-[10px] font-semibold rounded-lg hover:bg-[#fbbf24]/90 transition-colors whitespace-nowrap"
+                            >
+                              Upgrade &rarr;
+                            </a>
                           </div>
                         )}
                       </div>

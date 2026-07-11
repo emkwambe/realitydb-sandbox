@@ -52,10 +52,41 @@ export function DataStorePage({ onClose, onNavigate }: Props) {
   const [showBanner, setShowBanner] = useState(true);
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
   const [selectedFormat, setSelectedFormat] = useState('sql');
+  const [purchaseSuccess, setPurchaseSuccess] = useState<{ template: string; rows: string } | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadStore();
+
+    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    if (params.get('purchase') === 'success') {
+      setPurchaseSuccess({ template: params.get('template') || '', rows: params.get('rows') || '' });
+      const sessionId = params.get('session_id');
+      const url = new URL(window.location.href);
+      url.hash = '#data-store';
+      window.history.replaceState({}, '', url.toString());
+
+      // The webhook that issues the download token runs async after redirect,
+      // so poll a few times with backoff before giving up.
+      if (sessionId && sessionId !== '{CHECKOUT_SESSION_ID}') {
+        pollForDownload(sessionId);
+      }
+    }
   }, []);
+
+  async function pollForDownload(sessionId: string, attempt = 0) {
+    try {
+      const res = await fetch(`${LAB_API_URL}/v1/download-by-session/${sessionId}`);
+      if (res.ok) {
+        const data = await res.json() as { downloadUrl: string };
+        setDownloadUrl(`${LAB_API_URL}${data.downloadUrl}`);
+        return;
+      }
+    } catch {}
+    if (attempt < 6) {
+      setTimeout(() => pollForDownload(sessionId, attempt + 1), 5000);
+    }
+  }
 
   async function loadStore() {
     try {
@@ -79,7 +110,14 @@ export function DataStorePage({ onClose, onNavigate }: Props) {
     }
   }
 
-  function handleDownload(template: string, size: string, priceCents: number) {
+  function priceCentsToProductId(priceCents: number): string | null {
+    if (priceCents <= 4900) return 'pdt_0NiwqELSVr8obmFb7RAEO'; // dataset_50k — $49
+    if (priceCents <= 7900) return 'pdt_0NiwqEPggv7srrLKeOkLj'; // dataset_100k — $79
+    if (priceCents <= 29900) return 'pdt_0NiwqEQ5ceoWGiP9vWivF'; // dataset_500k — $299
+    return 'pdt_0NiwqEQT1zHgxVTA6Nf5B'; // dataset_1m — $499
+  }
+
+  async function handleDownload(template: string, size: string, priceCents: number) {
     if (priceCents === 0) {
       window.open(`${LAB_API_URL}/v1/store/${template}/download?size=${size}&format=sql`, '_blank');
       return;
@@ -88,7 +126,30 @@ export function DataStorePage({ onClose, onNavigate }: Props) {
       setShowAuth(true);
       return;
     }
-    alert('Stripe checkout coming soon. Contact academic@mpingo.ai for bulk purchases.');
+
+    const productId = priceCentsToProductId(priceCents);
+    try {
+      const res = await fetch(`${LAB_API_URL}/v1/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: productId,
+          user_email: user.email,
+          success_url: `${window.location.origin}/#data-store?purchase=success&template=${template}&rows=${size}&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${window.location.origin}/#data-store`,
+        }),
+      });
+      const data = await res.json() as { checkout_url?: string; error?: string };
+      if (!res.ok || !data.checkout_url) {
+        console.error('Checkout error:', data.error);
+        alert('Checkout unavailable. Please try again.');
+        return;
+      }
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      console.error('Checkout error:', err);
+      alert('Checkout unavailable. Please try again.');
+    }
   }
 
   function formatPrice(cents: number): string {
@@ -116,6 +177,31 @@ export function DataStorePage({ onClose, onNavigate }: Props) {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto">
+
+          {/* Purchase success banner */}
+          {purchaseSuccess && (
+            <div className="mb-6 border border-[#00e5a0]/30 bg-[#00e5a0]/5 rounded-lg p-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-[var(--muted)]">
+                <span className="mr-1">{'✅'}</span>
+                <span className="text-white font-medium">Purchase complete!</span>
+                {' '}
+                {downloadUrl
+                  ? 'Your dataset is ready.'
+                  : 'Preparing your download — this takes a few seconds.'}
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                {downloadUrl && (
+                  <a
+                    href={downloadUrl}
+                    className="px-3 py-1.5 text-[10px] font-semibold text-[#00e5a0] border border-[#00e5a0]/30 rounded-lg hover:bg-[#00e5a0]/10 transition-colors"
+                  >
+                    ⬇ Download your dataset
+                  </a>
+                )}
+                <button onClick={() => setPurchaseSuccess(null)} className="text-[var(--muted)] hover:text-white">&times;</button>
+              </div>
+            </div>
+          )}
 
           {/* Academic pricing banner */}
           {showBanner && (
