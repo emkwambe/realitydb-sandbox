@@ -1,56 +1,16 @@
 import { useState } from "react";
-import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from "recharts";
-import { PublicationMarkdown } from "./ExperimentUI";
+import { PublicationMarkdown, EvidenceChart as SharedEvidenceChart } from "./ExperimentUI";
+import { updateExperimentEvidence } from "../services/cloudSandboxService";
 
 const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || "https://realitydb-lab-api.eddy-078.workers.dev";
 const LAB_API_KEY = import.meta.env.VITE_LAB_API_KEY || "";
 
-const PIE_COLORS = ["#06d6a0", "#38bdf8", "#f59e0b", "#ef4444", "#a78bfa", "#f472b6", "#22d3ee", "#84cc16"];
-
 function EvidenceChart({ chartType, xKey, yKey, rows, accent, dark }) {
-  if (!rows || rows.length === 0) return null;
-  const gridColor = dark ? "#1e293b" : "#e2e8f0";
-  const textColor = dark ? "#94a3b8" : "#64748b";
-
-  if (chartType === "pie") {
-    return (
-      <ResponsiveContainer width="100%" height={260}>
-        <PieChart>
-          <Pie data={rows} dataKey={yKey} nameKey={xKey} cx="50%" cy="50%" outerRadius={90} label>
-            {rows.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-          </Pie>
-          <Tooltip />
-          <Legend wrapperStyle={{ fontSize: 11, color: textColor }} />
-        </PieChart>
-      </ResponsiveContainer>
-    );
-  }
-  if (chartType === "line") {
-    return (
-      <ResponsiveContainer width="100%" height={260}>
-        <LineChart data={rows}>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-          <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: textColor }} />
-          <YAxis tick={{ fontSize: 11, fill: textColor }} />
-          <Tooltip />
-          <Line type="monotone" dataKey={yKey} stroke={accent} strokeWidth={2} dot={{ r: 3 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  }
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={rows}>
-        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: textColor }} />
-        <YAxis tick={{ fontSize: 11, fill: textColor }} />
-        <Tooltip />
-        <Bar dataKey={yKey} fill={accent} radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <SharedEvidenceChart
+      chartType={chartType} xKey={xKey} yKey={yKey} rows={rows} height={260}
+      accentColor={accent} gridColor={dark ? "#1e293b" : "#e2e8f0"} textColor={dark ? "#94a3b8" : "#64748b"}
+    />
   );
 }
 
@@ -68,6 +28,9 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
   const [chartType, setChartType] = useState("bar");
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState("");
+  const [chartTitle, setChartTitle] = useState("");
+  const [chartDescription, setChartDescription] = useState("");
+  const [chartTags, setChartTags] = useState("");
   const [addingChart, setAddingChart] = useState(false);
 
   const [findings, setFindings] = useState("");
@@ -135,17 +98,31 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
     if (!chartSourceId || !chartX || !chartY) { fire("Pick a result, X column, and Y column", "error"); return; }
     setAddingChart(true);
     try {
+      const title = chartTitle.trim() || `${chartType} chart: ${chartY} by ${chartX}`;
       const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/evidence`, {
         method: "POST", headers,
         body: JSON.stringify({
           type: "chart",
-          title: `${chartType} chart: ${chartY} by ${chartX}`,
+          title,
           data: { chartType, xKey: chartX, yKey: chartY, sourceEvidenceId: chartSourceId },
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Failed to add chart (${res.status})`, "error"); setAddingChart(false); return; }
       setEvidence((prev) => [...prev, ...data.evidence]);
+
+      // Description/tags aren't part of evidence creation — set via a
+      // follow-up PATCH so the Visualization discovery lens has real
+      // metadata to search/display, not just an auto-generated title.
+      const chartBlock = data.evidence.find((e) => e.type === "chart");
+      if (chartBlock && (chartDescription.trim() || chartTags.trim())) {
+        await updateExperimentEvidence(experimentId, chartBlock.id, accessToken, {
+          description: chartDescription.trim() || undefined,
+          tags: chartTags.trim() || undefined,
+        });
+      }
+
+      setChartTitle(""); setChartDescription(""); setChartTags("");
       fire("Chart added");
     } catch (e) {
       fire(`Network error: ${e.message || e}`, "error");
@@ -267,7 +244,7 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
         {resultTables.length > 0 && (
           <div style={sectionStyle}>
             <div style={h4Style}>Add a chart from a result</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
               <select style={selectStyle} value={chartSourceId} onChange={(e) => { setChartSourceId(e.target.value); const rt = resultTables.find((r) => r.id === e.target.value); if (rt?.data.columns?.length >= 2) { setChartX(rt.data.columns[0]); setChartY(rt.data.columns[1]); } }}>
                 {resultTables.map((r) => <option key={r.id} value={r.id}>Result {r.id.slice(-6)} ({r.data.rowCount} rows)</option>)}
               </select>
@@ -282,6 +259,11 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
               <select style={{ ...selectStyle, flex: "none", width: 130 }} value={chartY} onChange={(e) => setChartY(e.target.value)}>
                 {resultTables.find((r) => r.id === chartSourceId)?.data.columns.map((c) => <option key={c} value={c}>y: {c}</option>)}
               </select>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} value={chartTitle} onChange={(e) => setChartTitle(e.target.value)} placeholder={`Title (default: "${chartType} chart: ${chartY || "y"} by ${chartX || "x"}")`} />
+              <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} value={chartDescription} onChange={(e) => setChartDescription(e.target.value)} placeholder="Description (optional) — shown in Visualization discovery" />
+              <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} value={chartTags} onChange={(e) => setChartTags(e.target.value)} placeholder="tags, comma, separated" />
               <button onClick={handleAddChart} disabled={addingChart} style={{ ...btnGhost, opacity: addingChart ? 0.6 : 1 }}>{addingChart ? "Adding…" : "Add chart"}</button>
             </div>
           </div>

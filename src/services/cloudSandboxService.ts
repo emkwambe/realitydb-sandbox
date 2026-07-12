@@ -426,6 +426,29 @@ export async function getExperiment(slug: string, accessToken?: string): Promise
 }
 
 /**
+ * Edit an evidence block's title/description/tags (e.g. give a chart a
+ * real title and description instead of its auto-generated one). Requires
+ * editor-or-above access on the parent experiment, enforced server-side.
+ */
+export async function updateExperimentEvidence(
+  experimentId: string,
+  evidenceId: string,
+  accessToken: string,
+  fields: { title?: string; description?: string; tags?: string }
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/evidence/${evidenceId}`, {
+      method: 'PATCH',
+      headers: getExperimentHeaders(accessToken),
+      body: JSON.stringify(fields),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Bookmark / un-bookmark an Experiment. Idempotent. Requires a verified
  * session — the actor is derived server-side from the token, not sent by
  * the client.

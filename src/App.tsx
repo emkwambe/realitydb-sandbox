@@ -1,5 +1,8 @@
 // App.tsx — RealityDB SimLab platform shell.
-// Clean hash-routed SPA: home / data-store / simlab / gallery / pricing.
+// Clean hash-routed SPA: home / data-store / simlab / discover / pricing.
+// 'discover' is the Knowledge Discovery layer (Experiments/Visualizations/
+// SQL/Profiles lenses); 'gallery' remains as a legacy alias so pre-existing
+// #gallery/<slug> links keep resolving unchanged.
 // Copied product components (DataStorePage, SimLabPage) are used UNMODIFIED —
 // App adapts to their existing prop signatures (onClose / onGallery).
 
@@ -11,10 +14,11 @@ import { DataStorePage } from './components/DataStorePage';
 import { SimLabPage } from './components/SimLabPage';
 import { GalleryPage } from './components/GalleryPage';
 import { ProfilePage } from './components/ProfilePage';
+import { DiscoverPage, DISCOVER_LENSES, type DiscoverLens } from './components/DiscoverPage';
 
-type Route = 'home' | 'data-store' | 'simlab' | 'gallery' | 'pricing' | 'profile';
+type Route = 'home' | 'data-store' | 'simlab' | 'gallery' | 'pricing' | 'profile' | 'discover';
 
-const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'gallery', 'pricing', 'profile'];
+const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'gallery', 'pricing', 'profile', 'discover'];
 
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '').split('/')[0] as Route;
@@ -26,10 +30,22 @@ function gallerySlugFromHash(): string | null {
   return h.startsWith('#gallery/') ? decodeURIComponent(h.slice('#gallery/'.length)) : null;
 }
 
+// #discover/<lens>[/<rest>] — a fixed whitelist of lenses is checked first;
+// an unrecognized first segment falls back to the 'experiments' lens so a
+// bare '#discover' still lands somewhere sensible.
+function discoverPathFromHash(): { lens: DiscoverLens; rest: string | null } {
+  const h = window.location.hash;
+  if (!h.startsWith('#discover/') && h !== '#discover') return { lens: 'experiments', rest: null };
+  const parts = h.replace(/^#discover\/?/, '').split('/').filter(Boolean);
+  const lens = (DISCOVER_LENSES as string[]).includes(parts[0]) ? (parts[0] as DiscoverLens) : 'experiments';
+  const rest = parts.slice(1).join('/');
+  return { lens, rest: rest ? decodeURIComponent(rest) : null };
+}
+
 const NAV_ITEMS: { id: Route; label: string }[] = [
   { id: 'data-store', label: 'Data Store' },
   { id: 'simlab', label: 'SimLab' },
-  { id: 'gallery', label: 'Gallery' },
+  { id: 'discover', label: 'Discover' },
   { id: 'pricing', label: 'Pricing' },
 ];
 
@@ -145,9 +161,10 @@ function Shell() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   const [routeParams, setRouteParams] = useState<Record<string, unknown>>({});
   const [gallerySlug, setGallerySlug] = useState<string | null>(gallerySlugFromHash);
+  const [discoverPath, setDiscoverPath] = useState(discoverPathFromHash);
 
   const navigate = useCallback((r: Route, params?: Record<string, unknown>) => {
-    window.location.hash = r === 'home' ? '' : r;
+    window.location.hash = r === 'home' ? '' : r === 'discover' ? 'discover/experiments' : r;
     setRoute(r);
     setRouteParams(params ?? {});
     setGallerySlug(null);
@@ -159,13 +176,15 @@ function Shell() {
     const onHash = () => {
       setRoute(routeFromHash());
       setGallerySlug(gallerySlugFromHash());
+      setDiscoverPath(discoverPathFromHash());
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  // DataStorePage, SimLabPage and GalleryPage are full-screen fixed overlays with
-  // their own headers; they cover the navbar by design. Home/Pricing render under it.
+  // DataStorePage, SimLabPage, GalleryPage, and DiscoverPage are full-screen
+  // fixed overlays with their own headers; they cover the navbar by design.
+  // Home/Pricing render under it.
   const showNavbar = route === 'home' || route === 'pricing';
 
   return (
@@ -180,11 +199,25 @@ function Shell() {
           onNavigate={(r, params) => navigate(r as Route, params)}
         />
       )}
+      {/* Legacy alias — #gallery/<slug> links shared before the Discover
+          layer shipped keep resolving here unchanged. */}
       {route === 'gallery' && <GalleryPage onClose={() => navigate('home')} slug={gallerySlug ?? undefined} />}
+      {route === 'discover' && (
+        <DiscoverPage
+          lens={discoverPath.lens}
+          rest={discoverPath.rest}
+          onClose={() => navigate('home')}
+          onNavigate={(lens, rest) => {
+            window.location.hash = `#discover/${lens}${rest ? '/' + encodeURIComponent(rest) : ''}`;
+            setDiscoverPath({ lens, rest: rest ?? null });
+            window.scrollTo({ top: 0 });
+          }}
+        />
+      )}
       {route === 'simlab' && (
         <SimLabPage
           onClose={() => navigate('home')}
-          onGallery={() => navigate('gallery')}
+          onGallery={() => navigate('discover')}
           preloadTemplate={routeParams.template as string | undefined}
           preloadRows={routeParams.rows as number | undefined}
         />

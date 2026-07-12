@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
-import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
-import { CredibilityBadges, SqlBlock, ResultTable, PublicationMarkdown, type CredibilityCounts } from './ExperimentUI';
+import { CredibilityBadges, SqlBlock, ResultTable, PublicationMarkdown, EvidenceChart, type CredibilityCounts } from './ExperimentUI';
 import {
   browseExperiments,
   getExperiment,
@@ -67,52 +63,10 @@ interface ExperimentDetail extends ExperimentSummary {
   evidence: EvidenceBlock[];
 }
 
-const PIE_COLORS = ['#06d6a0', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#f472b6', '#22d3ee', '#84cc16'];
-
 function EvidenceChartView({ block, evidence }: { block: EvidenceBlock; evidence: EvidenceBlock[] }) {
   const source = evidence.find((e) => e.id === block.data.sourceEvidenceId);
-  const rows = source?.data?.rows;
-  if (!rows || rows.length === 0) return <p className="text-xs text-[var(--muted)]">No data available for this chart.</p>;
-
   const { chartType, xKey, yKey } = block.data;
-
-  if (chartType === 'pie') {
-    return (
-      <ResponsiveContainer width="100%" height={280}>
-        <PieChart>
-          <Pie data={rows} dataKey={yKey} nameKey={xKey} cx="50%" cy="50%" outerRadius={100} label>
-            {rows.map((_: unknown, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-          </Pie>
-          <Tooltip />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-        </PieChart>
-      </ResponsiveContainer>
-    );
-  }
-  if (chartType === 'line') {
-    return (
-      <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={rows}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-          <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-          <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-          <Tooltip />
-          <Line type="monotone" dataKey={yKey} stroke="#06d6a0" strokeWidth={2} dot={{ r: 3 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    );
-  }
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={rows}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <Tooltip />
-        <Bar dataKey={yKey} fill="#06d6a0" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
+  return <EvidenceChart chartType={chartType} xKey={xKey} yKey={yKey} rows={source?.data?.rows} />;
 }
 
 export function GalleryPage({ onClose, slug }: Props) {

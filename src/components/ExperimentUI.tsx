@@ -1,6 +1,72 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from 'recharts';
+
+// ─────────────────────────────────────────────────────────────────────────
+// Evidence chart — shared bar/line/pie renderer used everywhere a chart
+// evidence block is drawn (Experiment detail page, builder live preview,
+// Visualization discovery cards, fullscreen modal). Previously duplicated
+// separately in GalleryPage.tsx and ExperimentBuilder.jsx.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const CHART_PIE_COLORS = ['#06d6a0', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#f472b6', '#22d3ee', '#84cc16'];
+
+export interface EvidenceChartProps {
+  chartType: 'bar' | 'line' | 'pie';
+  xKey: string;
+  yKey: string;
+  rows: any[] | undefined;
+  height?: number;
+  accentColor?: string;
+  gridColor?: string;
+  textColor?: string;
+}
+
+export function EvidenceChart({ chartType, xKey, yKey, rows, height = 280, accentColor = '#06d6a0', gridColor = '#1e293b', textColor = '#94a3b8' }: EvidenceChartProps) {
+  if (!rows || rows.length === 0) return <p className="text-xs text-[var(--muted)]">No data available for this chart.</p>;
+
+  if (chartType === 'pie') {
+    return (
+      <ResponsiveContainer width="100%" height={height}>
+        <PieChart>
+          <Pie data={rows} dataKey={yKey} nameKey={xKey} cx="50%" cy="50%" outerRadius={height * 0.35} label>
+            {rows.map((_: unknown, i: number) => <Cell key={i} fill={CHART_PIE_COLORS[i % CHART_PIE_COLORS.length]} />)}
+          </Pie>
+          <Tooltip />
+          <Legend wrapperStyle={{ fontSize: 11, color: textColor }} />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+  if (chartType === 'line') {
+    return (
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={rows}>
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: textColor }} />
+          <YAxis tick={{ fontSize: 11, fill: textColor }} />
+          <Tooltip />
+          <Line type="monotone" dataKey={yKey} stroke={accentColor} strokeWidth={2} dot={{ r: 3 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={rows}>
+        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: textColor }} />
+        <YAxis tick={{ fontSize: 11, fill: textColor }} />
+        <Tooltip />
+        <Bar dataKey={yKey} fill={accentColor} radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Credibility badges — the "is this trustworthy" summary. Reads directly
