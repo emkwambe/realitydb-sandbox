@@ -192,7 +192,7 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
           </button>
           {onGallery && (
             <button onClick={onGallery} className="text-[10px] text-[#22d3ee] border border-[#22d3ee]/30 rounded px-2 py-1 hover:bg-[#22d3ee]/10">
-              Lab Gallery
+              Discover
             </button>
           )}
           {user && (
