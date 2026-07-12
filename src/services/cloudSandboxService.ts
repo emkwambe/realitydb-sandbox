@@ -40,6 +40,16 @@ function getHeaders(): Record<string, string> {
   };
 }
 
+// Authorization-sensitive Experiment endpoints derive the actor from a
+// verified Supabase JWT server-side (see lab-api's verifySupabaseJWT) —
+// they no longer accept a client-supplied userId. accessToken must be the
+// real session.access_token from useAuth(); omit it for public reads.
+function getExperimentHeaders(accessToken?: string): Record<string, string> {
+  const headers = getHeaders();
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  return headers;
+}
+
 export function isCloudConfigured(): boolean {
   return !!LAB_API_URL && !!LAB_API_KEY;
 }
@@ -401,13 +411,13 @@ export async function browseExperiments(params?: {
 
 /**
  * Get a single published Experiment (with full evidence) by slug.
- * Pass userId to view non-public visibility the caller has access to, and
- * to get back the caller's bookmark state / resolved access level.
+ * Pass a verified accessToken to view non-public visibility the caller
+ * has access to, and to get back the caller's bookmark state / resolved
+ * access level. Omit it for a plain public read.
  */
-export async function getExperiment(slug: string, userId?: string): Promise<Record<string, unknown> | null> {
+export async function getExperiment(slug: string, accessToken?: string): Promise<Record<string, unknown> | null> {
   try {
-    const url = `${LAB_API_URL}/v1/gallery/experiments/${slug}${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`;
-    const res = await fetch(url);
+    const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}`, { headers: getExperimentHeaders(accessToken) });
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -416,15 +426,15 @@ export async function getExperiment(slug: string, userId?: string): Promise<Reco
 }
 
 /**
- * Bookmark / un-bookmark an Experiment. Idempotent.
+ * Bookmark / un-bookmark an Experiment. Idempotent. Requires a verified
+ * session — the actor is derived server-side from the token, not sent by
+ * the client.
  */
-export async function setExperimentBookmark(experimentId: string, userId: string, bookmarked: boolean): Promise<boolean> {
+export async function setExperimentBookmark(experimentId: string, accessToken: string, bookmarked: boolean): Promise<boolean> {
   try {
     const res = await fetch(
-      `${LAB_API_URL}/v1/experiments/${experimentId}/bookmark${bookmarked ? '' : `?userId=${encodeURIComponent(userId)}`}`,
-      bookmarked
-        ? { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) }
-        : { method: 'DELETE', headers: getHeaders() }
+      `${LAB_API_URL}/v1/experiments/${experimentId}/bookmark`,
+      { method: bookmarked ? 'POST' : 'DELETE', headers: getExperimentHeaders(accessToken) }
     );
     return res.ok;
   } catch {
@@ -436,12 +446,12 @@ export async function setExperimentBookmark(experimentId: string, userId: string
  * Report a reproduction — "I re-ran this and got a matching (or not)
  * result."
  */
-export async function submitReproduction(experimentId: string, userId: string, matched: boolean, notes?: string): Promise<boolean> {
+export async function submitReproduction(experimentId: string, accessToken: string, matched: boolean, notes?: string): Promise<boolean> {
   try {
     const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reproductions`, {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ userId, matched, notes }),
+      headers: getExperimentHeaders(accessToken),
+      body: JSON.stringify({ matched, notes }),
     });
     return res.ok;
   } catch {
@@ -452,10 +462,9 @@ export async function submitReproduction(experimentId: string, userId: string, m
 /**
  * List structured peer reviews for an Experiment.
  */
-export async function getExperimentReviews(experimentId: string, userId?: string): Promise<Array<Record<string, unknown>>> {
+export async function getExperimentReviews(experimentId: string, accessToken?: string): Promise<Array<Record<string, unknown>>> {
   try {
-    const url = `${LAB_API_URL}/v1/experiments/${experimentId}/reviews${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`;
-    const res = await fetch(url);
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews`, { headers: getExperimentHeaders(accessToken) });
     if (!res.ok) return [];
     const data = await res.json();
     return data.reviews ?? [];
@@ -470,7 +479,7 @@ export async function getExperimentReviews(experimentId: string, userId?: string
  */
 export async function submitExperimentReview(
   experimentId: string,
-  userId: string,
+  accessToken: string,
   reviewType: 'suggestion' | 'question' | 'concern' | 'endorsement',
   content: string,
   evidenceId?: string
@@ -478,8 +487,8 @@ export async function submitExperimentReview(
   try {
     const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews`, {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ userId, reviewType, content, evidenceId }),
+      headers: getExperimentHeaders(accessToken),
+      body: JSON.stringify({ reviewType, content, evidenceId }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -494,11 +503,11 @@ export async function submitExperimentReview(
 /**
  * Withdraw your own review.
  */
-export async function withdrawExperimentReview(experimentId: string, reviewId: string, userId: string): Promise<boolean> {
+export async function withdrawExperimentReview(experimentId: string, reviewId: string, accessToken: string): Promise<boolean> {
   try {
-    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews/${reviewId}?userId=${encodeURIComponent(userId)}`, {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews/${reviewId}`, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: getExperimentHeaders(accessToken),
     });
     return res.ok;
   } catch {
@@ -509,12 +518,12 @@ export async function withdrawExperimentReview(experimentId: string, reviewId: s
 /**
  * Owner/editor marks a review addressed or dismissed.
  */
-export async function resolveExperimentReview(experimentId: string, reviewId: string, userId: string, status: 'addressed' | 'dismissed'): Promise<boolean> {
+export async function resolveExperimentReview(experimentId: string, reviewId: string, accessToken: string, status: 'addressed' | 'dismissed'): Promise<boolean> {
   try {
     const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews/${reviewId}`, {
       method: 'PATCH',
-      headers: getHeaders(),
-      body: JSON.stringify({ userId, status }),
+      headers: getExperimentHeaders(accessToken),
+      body: JSON.stringify({ status }),
     });
     return res.ok;
   } catch {
@@ -526,12 +535,11 @@ export async function resolveExperimentReview(experimentId: string, reviewId: st
  * Fork a published Experiment — provisions a fresh lab from the same
  * template/seed/rows and clones all evidence into a new draft.
  */
-export async function forkExperiment(slug: string, userId: string): Promise<{ id: string; labId: string; connectionString: string } | null> {
+export async function forkExperiment(slug: string, accessToken: string): Promise<{ id: string; labId: string; connectionString: string } | null> {
   try {
     const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}/fork`, {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ userId }),
+      headers: getExperimentHeaders(accessToken),
     });
     if (!res.ok) return null;
     return res.json();

@@ -75,7 +75,7 @@ interface Props {
 }
 
 export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }: Props) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [templates, setTemplates] = useState<StoreTemplate[]>([]);
   const [activeLabs, setActiveLabs] = useState<ActiveLab[]>([]);
   const [loading, setLoading] = useState(true);
@@ -504,7 +504,7 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
 
       {showManage && (
         <div className="fixed inset-0 z-[60] overflow-auto bg-[#0a0f1a]">
-          <SimLabV3 onClose={() => setShowManage(false)} onGallery={onGallery} userId={user?.id} userEmail={user?.email} onRequestAuth={() => setShowAuth(true)} />
+          <SimLabV3 onClose={() => setShowManage(false)} onGallery={onGallery} accessToken={session?.access_token} userEmail={user?.email} onRequestAuth={() => setShowAuth(true)} />
         </div>
       )}
     </div>

@@ -53,7 +53,7 @@ function EvidenceChart({ chartType, xKey, yKey, rows, accent, dark }) {
   );
 }
 
-export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, dark, inputStyle, selectStyle, btnPrimary, btnGhost, Label, fire }) {
+export default function ExperimentBuilder({ selectedLab, accessToken, userEmail, t, dark, inputStyle, selectStyle, btnPrimary, btnGhost, Label, fire }) {
   const [experimentId, setExperimentId] = useState(null);
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
@@ -76,7 +76,9 @@ export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, d
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
 
-  const headers = { "Content-Type": "application/json", "X-API-Key": LAB_API_KEY };
+  // Authorization-sensitive endpoints derive the actor from this verified
+  // Supabase JWT server-side — never from a client-supplied userId.
+  const headers = { "Content-Type": "application/json", "X-API-Key": LAB_API_KEY, "Authorization": `Bearer ${accessToken}` };
   const resultTables = evidence.filter((e) => e.type === "result_table");
 
   const handleStart = async () => {
@@ -86,7 +88,7 @@ export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, d
     try {
       const res = await fetch(`${LAB_API_URL}/v1/experiments`, {
         method: "POST", headers,
-        body: JSON.stringify({ title: title.trim(), question: question.trim(), labId: selectedLab.id, userId }),
+        body: JSON.stringify({ title: title.trim(), question: question.trim(), labId: selectedLab.id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Failed to start experiment (${res.status})`, "error"); setStarting(false); return; }
@@ -105,7 +107,7 @@ export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, d
     try {
       const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/evidence`, {
         method: "POST", headers,
-        body: JSON.stringify({ type: "sql_query", execute: true, sql: sqlDraft.trim(), userId }),
+        body: JSON.stringify({ type: "sql_query", execute: true, sql: sqlDraft.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Query failed (${res.status})`, "error"); setRunning(false); return; }
@@ -137,7 +139,6 @@ export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, d
           type: "chart",
           title: `${chartType} chart: ${chartY} by ${chartX}`,
           data: { chartType, xKey: chartX, yKey: chartY, sourceEvidenceId: chartSourceId },
-          userId,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -158,11 +159,11 @@ export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, d
     try {
       await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}`, {
         method: "PATCH", headers,
-        body: JSON.stringify({ findings: findings.trim(), authors: authors.trim() || undefined, tags: tags.trim() || undefined, userId }),
+        body: JSON.stringify({ findings: findings.trim(), authors: authors.trim() || undefined, tags: tags.trim() || undefined }),
       });
       const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/publish`, {
         method: "POST", headers,
-        body: JSON.stringify({ visibility, userId }),
+        body: JSON.stringify({ visibility }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Publish failed (${res.status})`, "error"); setPublishing(false); return; }

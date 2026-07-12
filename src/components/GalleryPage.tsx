@@ -115,7 +115,8 @@ function EvidenceChartView({ block, evidence }: { block: EvidenceBlock; evidence
 }
 
 export function GalleryPage({ onClose, slug }: Props) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const accessToken = session?.access_token;
   const [showAuth, setShowAuth] = useState(false);
 
   const [experiments, setExperiments] = useState<ExperimentSummary[]>([]);
@@ -154,61 +155,61 @@ export function GalleryPage({ onClose, slug }: Props) {
     setDetailLoading(true);
     setDetailError('');
     setForkResult(null);
-    const exp = await getExperiment(slug, user?.id);
+    const exp = await getExperiment(slug, accessToken);
     if (!exp) setDetailError('Experiment not found — it may have been unpublished.');
     else setDetail(exp as unknown as ExperimentDetail);
     setDetailLoading(false);
-    const rev = await getExperimentReviews(slug, user?.id);
+    const rev = await getExperimentReviews(slug, accessToken);
     setReviews(rev as unknown as ReviewItem[]);
   }
 
   useEffect(() => {
     loadDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, user?.id]);
+  }, [slug, accessToken]);
 
   async function handleToggleBookmark() {
-    if (!requireAuth() || !detail || !user) return;
+    if (!requireAuth() || !detail || !accessToken) return;
     setBookmarkBusy(true);
     const next = !detail.bookmarked;
-    const ok = await setExperimentBookmark(detail.id, user.id, next);
+    const ok = await setExperimentBookmark(detail.id, accessToken, next);
     if (ok) setDetail((d) => (d ? { ...d, bookmarked: next } : d));
     setBookmarkBusy(false);
   }
 
   async function handleSubmitReproduction() {
-    if (!requireAuth() || !detail || !user || reproMatched === null) return;
+    if (!requireAuth() || !detail || !accessToken || reproMatched === null) return;
     setReproSubmitting(true);
-    const ok = await submitReproduction(detail.id, user.id, reproMatched, reproNotes.trim() || undefined);
+    const ok = await submitReproduction(detail.id, accessToken, reproMatched, reproNotes.trim() || undefined);
     if (ok) setReproSubmitted(true);
     setReproSubmitting(false);
   }
 
   async function handleSubmitReview() {
-    if (!requireAuth() || !detail || !user) return;
+    if (!requireAuth() || !detail || !accessToken) return;
     if (!reviewContent.trim()) { setReviewError('Write your suggestion, question, or concern first.'); return; }
     setReviewSubmitting(true);
     setReviewError('');
-    const result = await submitExperimentReview(detail.id, user.id, reviewType, reviewContent.trim(), reviewEvidenceId || undefined);
+    const result = await submitExperimentReview(detail.id, accessToken, reviewType, reviewContent.trim(), reviewEvidenceId || undefined);
     if (!result.ok) {
       setReviewError(result.error || 'Failed to submit review.');
     } else {
       setReviewContent('');
-      const rev = await getExperimentReviews(slug!, user.id);
+      const rev = await getExperimentReviews(slug!, accessToken);
       setReviews(rev as unknown as ReviewItem[]);
     }
     setReviewSubmitting(false);
   }
 
   async function handleWithdrawReview(reviewId: string) {
-    if (!detail || !user) return;
-    const ok = await withdrawExperimentReview(detail.id, reviewId, user.id);
+    if (!detail || !accessToken) return;
+    const ok = await withdrawExperimentReview(detail.id, reviewId, accessToken);
     if (ok) setReviews((prev) => prev.filter((r) => r.id !== reviewId));
   }
 
   async function handleResolveReview(reviewId: string, status: 'addressed' | 'dismissed') {
-    if (!detail || !user) return;
-    const ok = await resolveExperimentReview(detail.id, reviewId, user.id, status);
+    if (!detail || !accessToken) return;
+    const ok = await resolveExperimentReview(detail.id, reviewId, accessToken, status);
     if (ok) setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, status } : r)));
   }
 
@@ -229,10 +230,10 @@ export function GalleryPage({ onClose, slug }: Props) {
   }
 
   async function handleFork() {
-    if (!requireAuth() || !detail || !user) return;
+    if (!requireAuth() || !detail || !accessToken) return;
     setForking(true);
     setError('');
-    const result = await forkExperiment(detail.slug, user.id);
+    const result = await forkExperiment(detail.slug, accessToken);
     if (!result) {
       setError('Failed to fork experiment. Try again.');
       setForking(false);
