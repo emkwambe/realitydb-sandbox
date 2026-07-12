@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import ExperimentBuilder from "./ExperimentBuilder";
 
 const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || "https://realitydb-lab-api.eddy-078.workers.dev";
 const LAB_API_KEY = import.meta.env.VITE_LAB_API_KEY || "";
@@ -393,6 +394,7 @@ export default function SimLab({ onClose, onGallery }) {
     { id: "anomaly", label: "Inject anomalies" },
     { id: "whatif", label: "What-if analysis" },
     { id: "quality", label: "Quality report" },
+    { id: "experiment", label: "Experiment" },
     { id: "snapshot", label: "Snapshot" },
     { id: "export", label: "Export" },
     { id: "cicd", label: "CI/CD" },
@@ -881,6 +883,33 @@ workflows:
             <button onClick={() => handleCopyText(JSON.stringify(qualityResult, null, 2), "scorecard JSON")} style={btnGhost}>Copy JSON</button>
           </div>
         </div>
+      )}
+    </div>}
+
+    {/* EXPERIMENT */}
+    {tab === "experiment" && <div style={{ background: t.card, border: `0.5px solid ${t.border}`, borderRadius: 12, padding: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>Experiment</div>
+        <span style={{ fontSize: 11, color: t.hint }}>Ask a question, run analyses, publish evidence-backed findings</span>
+      </div>
+      {sandboxes.length === 0 ? (
+        <div style={{ padding: 24, textAlign: "center", color: t.muted, fontSize: 13 }}>Create a lab first.</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center" }}>
+            <Label>Lab</Label>
+            <select style={selectStyle} value={selectedLabId} onChange={(e) => setSelectedLabId(e.target.value)}>
+              {sandboxes.map((sb) => <option key={sb.id} value={sb.id}>{sb.name} ({sb.template})</option>)}
+            </select>
+          </div>
+          <ExperimentBuilder
+            selectedLab={selectedLab}
+            t={t} dark={dark}
+            inputStyle={inputStyle} selectStyle={selectStyle}
+            btnPrimary={btnPrimary} btnGhost={btnGhost}
+            Label={Label} fire={fire}
+          />
+        </>
       )}
     </div>}
 

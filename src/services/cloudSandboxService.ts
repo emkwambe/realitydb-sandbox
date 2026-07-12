@@ -376,6 +376,60 @@ export async function getGalleryLab(slug: string): Promise<Record<string, unknow
 }
 
 /**
+ * Browse published Experiments (the Experiment Gallery).
+ */
+export async function browseExperiments(params?: {
+  tag?: string;
+  template?: string;
+  q?: string;
+}): Promise<Array<Record<string, unknown>>> {
+  try {
+    const searchParams = new URLSearchParams();
+    if (params?.tag) searchParams.set('tag', params.tag);
+    if (params?.template) searchParams.set('template', params.template);
+    if (params?.q) searchParams.set('q', params.q);
+
+    const url = `${LAB_API_URL}/v1/gallery/experiments${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.experiments ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get a single published Experiment (with full evidence) by slug.
+ */
+export async function getExperiment(slug: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fork a published Experiment — provisions a fresh lab from the same
+ * template/seed/rows and clones all evidence into a new draft.
+ */
+export async function forkExperiment(slug: string): Promise<{ id: string; labId: string; connectionString: string } | null> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}/fork`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fork a published lab from the gallery.
  */
 export async function forkGalleryLab(slug: string, name?: string): Promise<CreateLabResult | null> {

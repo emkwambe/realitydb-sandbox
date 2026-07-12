@@ -1,58 +1,120 @@
 import { useState, useEffect } from 'react';
 import {
-  browseGallery,
-  forkGalleryLab,
-  getGalleryLab,
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from 'recharts';
+import {
+  browseExperiments,
+  getExperiment,
+  forkExperiment,
 } from '../services/cloudSandboxService';
 
 interface Props {
   onClose: () => void;
-  onLabCreated?: (connectionString: string) => void;
   slug?: string;
 }
 
-interface PublishedLab {
+interface EvidenceBlock {
+  id: string;
+  type: 'sql_query' | 'result_table' | 'chart' | 'markdown';
+  title: string | null;
+  data: any;
+}
+
+interface ExperimentSummary {
   id: string;
   slug: string;
   title: string;
+  question: string;
   authors: string;
-  description: string;
   tags: string;
   template: string;
+  seed: number | null;
   rows: number;
-  tables_count: number;
-  license: string;
   view_count: number;
   fork_count: number;
   published_at: string;
 }
 
-const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || 'https://realitydb-lab-api.eddy-078.workers.dev';
+interface ExperimentDetail extends ExperimentSummary {
+  findings: string;
+  lab_version: string;
+  engine_version: string;
+  forked_from_id: string | null;
+  license: string;
+  evidence: EvidenceBlock[];
+}
 
-export function GalleryPage({ onClose, onLabCreated, slug }: Props) {
-  const [labs, setLabs] = useState<PublishedLab[]>([]);
+const PIE_COLORS = ['#06d6a0', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#f472b6', '#22d3ee', '#84cc16'];
+
+function EvidenceChartView({ block, evidence }: { block: EvidenceBlock; evidence: EvidenceBlock[] }) {
+  const source = evidence.find((e) => e.id === block.data.sourceEvidenceId);
+  const rows = source?.data?.rows;
+  if (!rows || rows.length === 0) return <p className="text-xs text-[var(--muted)]">No data available for this chart.</p>;
+
+  const { chartType, xKey, yKey } = block.data;
+
+  if (chartType === 'pie') {
+    return (
+      <ResponsiveContainer width="100%" height={280}>
+        <PieChart>
+          <Pie data={rows} dataKey={yKey} nameKey={xKey} cx="50%" cy="50%" outerRadius={100} label>
+            {rows.map((_: unknown, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+          </Pie>
+          <Tooltip />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+  if (chartType === 'line') {
+    return (
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={rows}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+          <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+          <Tooltip />
+          <Line type="monotone" dataKey={yKey} stroke="#06d6a0" strokeWidth={2} dot={{ r: 3 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <BarChart data={rows}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+        <Tooltip />
+        <Bar dataKey={yKey} fill="#06d6a0" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function GalleryPage({ onClose, slug }: Props) {
+  const [experiments, setExperiments] = useState<ExperimentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [templateFilter, setTemplateFilter] = useState('');
-  const [forking, setForking] = useState<string | null>(null);
-  const [forkResult, setForkResult] = useState<{ slug: string; connectionString: string } | null>(null);
   const [error, setError] = useState('');
 
-  const [detailLab, setDetailLab] = useState<PublishedLab | null>(null);
+  const [detail, setDetail] = useState<ExperimentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [forking, setForking] = useState(false);
+  const [forkResult, setForkResult] = useState<{ connectionString: string } | null>(null);
 
   useEffect(() => {
     if (!slug) return;
     setDetailLoading(true);
     setDetailError('');
-    getGalleryLab(slug).then((lab) => {
-      if (!lab) {
-        setDetailError('Lab not found.');
-      } else {
-        setDetailLab(lab as unknown as PublishedLab);
-      }
+    setForkResult(null);
+    getExperiment(slug).then((exp) => {
+      if (!exp) setDetailError('Experiment not found — it may have been unpublished.');
+      else setDetail(exp as unknown as ExperimentDetail);
       setDetailLoading(false);
     });
   }, [slug]);
@@ -68,54 +130,52 @@ export function GalleryPage({ onClose, onLabCreated, slug }: Props) {
     if (tagFilter) params.tag = tagFilter;
     if (templateFilter) params.template = templateFilter;
     if (searchQuery) params.q = searchQuery;
-    const result = await browseGallery(params);
-    setLabs(result as unknown as PublishedLab[]);
+    const result = await browseExperiments(params);
+    setExperiments(result as unknown as ExperimentSummary[]);
     setLoading(false);
   }
 
-  async function handleFork(slug: string) {
-    setForking(slug);
+  async function handleFork() {
+    if (!detail) return;
+    setForking(true);
     setError('');
-    const result = await forkGalleryLab(slug);
+    const result = await forkExperiment(detail.slug);
     if (!result) {
-      setError('Failed to fork lab. Try again.');
-      setForking(null);
+      setError('Failed to fork experiment. Try again.');
+      setForking(false);
       return;
     }
-    setForkResult({ slug, connectionString: result.connectionString });
-    setForking(null);
-    onLabCreated?.(result.connectionString);
+    setForkResult({ connectionString: result.connectionString });
+    setForking(false);
   }
 
   function handleCopy(text: string) {
     navigator.clipboard.writeText(text);
   }
 
-  // Extract unique tags from all labs
   const allTags = Array.from(
-    new Set(labs.flatMap((l) => l.tags ? l.tags.split(',').map((t) => t.trim()).filter(Boolean) : []))
+    new Set(experiments.flatMap((e) => e.tags ? e.tags.split(',').map((t) => t.trim()).filter(Boolean) : []))
   );
-  const allTemplates = Array.from(new Set(labs.map((l) => l.template).filter(Boolean)));
+  const allTemplates = Array.from(new Set(experiments.map((e) => e.template).filter(Boolean)));
 
   return (
     <div className="fixed inset-0 z-50 bg-bg flex flex-col">
       {/* Header */}
       <div className="h-12 border-b border-[var(--border)] bg-bg-elevated flex items-center px-4 gap-3 shrink-0">
-        <span className="text-accent font-bold">Lab Gallery</span>
-        <span className="text-[var(--muted)] text-sm">Community published labs</span>
+        <span className="text-accent font-bold">Experiment Gallery</span>
+        <span className="text-[var(--muted)] text-sm">Published analytical work — evidence, findings, and reproducible investigations</span>
         <span className="ml-auto">
           <button onClick={onClose} className="text-xs text-[var(--muted)] hover:text-white">Close</button>
         </span>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-4xl mx-auto">
+
+          {/* ── DETAIL VIEW ─────────────────────────────────────────── */}
           {slug && (
-            <div className="mb-6">
-              <button
-                onClick={onClose}
-                className="text-xs text-[var(--muted)] hover:text-white mb-4"
-              >
+            <div>
+              <button onClick={onClose} className="text-xs text-[var(--muted)] hover:text-white mb-4">
                 &larr; Back to gallery
               </button>
 
@@ -128,100 +188,148 @@ export function GalleryPage({ onClose, onLabCreated, slug }: Props) {
               {!detailLoading && detailError && (
                 <div className="text-center py-16">
                   <h3 className="text-lg font-medium text-white mb-2">{detailError}</h3>
-                  <p className="text-sm text-[var(--muted)]">This lab may have been unpublished.</p>
                 </div>
               )}
 
-              {!detailLoading && detailLab && (
-                <div className="bg-bg-card border border-[var(--border)] rounded-lg p-6 max-w-2xl">
-                  <h3 className="text-xl font-semibold text-white mb-1">{detailLab.title}</h3>
-                  <p className="text-xs text-[var(--muted)] mb-4">by {detailLab.authors || 'Anonymous'}</p>
+              {!detailLoading && detail && (
+                <div className="space-y-5">
+                  {/* Question */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1">Question</p>
+                    <h1 className="text-2xl font-bold text-white mb-1">{detail.title}</h1>
+                    {detail.question && <p className="text-sm text-[var(--muted)]">{detail.question}</p>}
+                    <p className="text-xs text-[var(--muted)] mt-2">
+                      by {detail.authors || 'Anonymous'} &middot; {new Date(detail.published_at).toLocaleDateString()}
+                      {detail.forked_from_id && <span> &middot; forked experiment</span>}
+                    </p>
+                  </div>
 
-                  {detailLab.description && (
-                    <p className="text-sm text-[var(--muted)] mb-4">{detailLab.description}</p>
+                  {/* Environment */}
+                  <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Environment</p>
+                    <div className="flex flex-wrap gap-2 text-[11px]">
+                      <span className="bg-bg-elevated px-2 py-1 rounded">template: {detail.template}</span>
+                      {detail.seed != null && <span className="bg-bg-elevated px-2 py-1 rounded">seed: {detail.seed}</span>}
+                      <span className="bg-bg-elevated px-2 py-1 rounded">rows: {detail.rows?.toLocaleString()}</span>
+                      <span className="bg-bg-elevated px-2 py-1 rounded">engine: {detail.engine_version}</span>
+                      <span className="bg-bg-elevated px-2 py-1 rounded">lab: {detail.lab_version}</span>
+                    </div>
+                  </div>
+
+                  {/* Method + Evidence */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Method &amp; Evidence</p>
+                    <div className="space-y-4">
+                      {detail.evidence.filter((e) => e.type !== 'result_table').map((e) => (
+                        <div key={e.id} className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
+                          {e.type === 'sql_query' && (
+                            <>
+                              {e.title && <p className="text-xs font-medium text-white mb-2">{e.title}</p>}
+                              <pre className="text-[11px] text-[var(--muted)] whitespace-pre-wrap font-mono bg-bg-elevated rounded p-3 overflow-x-auto">{e.data.sql}</pre>
+                              {e.data.executionTimeMs != null && (
+                                <p className="text-[10px] text-[var(--muted)] mt-1">{e.data.executionTimeMs}ms</p>
+                              )}
+                              {(() => {
+                                const result = detail.evidence.find((r) => r.type === 'result_table' && r.data.sourceEvidenceId === e.id);
+                                if (!result) return null;
+                                return (
+                                  <div className="overflow-x-auto mt-3">
+                                    <table className="text-[11px] w-full">
+                                      <thead>
+                                        <tr>{result.data.columns.map((c: string) => (
+                                          <th key={c} className="text-left px-2 py-1 text-[var(--muted)] border-b border-[var(--border)]">{c}</th>
+                                        ))}</tr>
+                                      </thead>
+                                      <tbody>
+                                        {result.data.rows.slice(0, 10).map((r: any, i: number) => (
+                                          <tr key={i}>{result.data.columns.map((c: string) => (
+                                            <td key={c} className="px-2 py-1 text-white border-b border-[var(--border)]">{String(r[c])}</td>
+                                          ))}</tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                    <p className="text-[10px] text-[var(--muted)] mt-1">
+                                      {result.data.rowCount} rows{result.data.truncated ? ' (showing first 500, capped for storage)' : ''}
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+                            </>
+                          )}
+                          {e.type === 'chart' && (
+                            <>
+                              {e.title && <p className="text-xs font-medium text-white mb-2">{e.title}</p>}
+                              <EvidenceChartView block={e} evidence={detail.evidence} />
+                            </>
+                          )}
+                          {e.type === 'markdown' && (
+                            <p className="text-sm text-[var(--muted)] whitespace-pre-wrap">{e.data.content}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Findings */}
+                  {detail.findings && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Findings</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
+                        <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{detail.findings}</p>
+                      </div>
+                    </div>
                   )}
 
-                  <div className="flex flex-wrap items-center gap-2 mb-4 text-[10px] text-[var(--muted)]">
-                    <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{detailLab.template}</span>
-                    {detailLab.rows > 0 && (
-                      <span className="bg-bg-elevated px-1.5 py-0.5 rounded">
-                        {detailLab.rows >= 1000 ? `${detailLab.rows / 1000}K` : detailLab.rows} rows
-                      </span>
-                    )}
-                    {detailLab.tables_count > 0 && (
-                      <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{detailLab.tables_count} tables</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3 text-[10px] text-[var(--muted)] mb-4">
-                    <span>{detailLab.view_count ?? 0} views</span>
-                    <span>{detailLab.fork_count ?? 0} forks</span>
-                    {detailLab.license && <span>{detailLab.license}</span>}
-                  </div>
-
-                  {detailLab.tags && (
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {detailLab.tags.split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-                        <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded">
-                          {tag}
-                        </span>
+                  {/* Tags */}
+                  {detail.tags && (
+                    <div className="flex flex-wrap gap-1">
+                      {detail.tags.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                        <span key={t} className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded">{t}</span>
                       ))}
                     </div>
                   )}
 
-                  {error && (
-                    <div className="p-3 bg-red-400/10 border border-red-400/20 rounded-lg text-xs text-red-400 mb-4">{error}</div>
-                  )}
-
-                  {forkResult ? (
-                    <div className="p-4 bg-[#00e5a0]/5 border border-[#00e5a0]/30 rounded-lg">
-                      <p className="text-sm text-[#00e5a0] font-medium mb-2">Lab forked successfully!</p>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 bg-bg-elevated rounded p-2 text-[10px] font-mono text-white break-all">
-                          {forkResult.connectionString}
-                        </code>
-                        <button onClick={() => handleCopy(forkResult.connectionString)} className="text-[10px] text-accent shrink-0">
-                          Copy
-                        </button>
+                  {/* Reproducibility */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Reproducibility</p>
+                    {error && (
+                      <div className="p-3 bg-red-400/10 border border-red-400/20 rounded-lg text-xs text-red-400 mb-3">{error}</div>
+                    )}
+                    {forkResult ? (
+                      <div className="p-4 bg-[#00e5a0]/5 border border-[#00e5a0]/30 rounded-lg">
+                        <p className="text-sm text-[#00e5a0] font-medium mb-2">Forked! A new lab and draft experiment were created from the same template, seed, and evidence.</p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 bg-bg-elevated rounded p-2 text-[10px] font-mono text-white break-all">{forkResult.connectionString}</code>
+                          <button onClick={() => handleCopy(forkResult.connectionString)} className="text-[10px] text-accent shrink-0">Copy</button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 pt-4 border-t border-[var(--border)]">
+                    ) : (
                       <button
-                        onClick={() => handleFork(detailLab.slug)}
-                        disabled={forking === detailLab.slug}
-                        className="flex-1 px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                        onClick={handleFork}
+                        disabled={forking}
+                        className="px-4 py-2 bg-accent text-black text-xs font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
                       >
-                        {forking === detailLab.slug ? 'Forking...' : 'Fork Lab'}
+                        {forking ? 'Forking...' : 'Fork this Experiment'}
                       </button>
-                      <a
-                        href={`${LAB_API_URL}/v1/labs/${detailLab.id}/export?format=notebook`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 text-[11px] text-[var(--muted)] border border-[var(--border)] rounded-lg hover:text-white hover:border-white/30 transition-colors"
-                      >
-                        .ipynb
-                      </a>
-                    </div>
-                  )}
-
-                  <p className="text-[9px] text-[var(--muted)] mt-4">
-                    {new Date(detailLab.published_at).toLocaleDateString()}
-                  </p>
+                    )}
+                    <p className="text-[10px] text-[var(--muted)] mt-2">
+                      {detail.view_count} views &middot; {detail.fork_count} forks &middot; {detail.license}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
+          {/* ── LIST VIEW ───────────────────────────────────────────── */}
           {!slug && (
           <>
-          {/* Search & Filters */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search labs..."
+              placeholder="Search experiments..."
               className="flex-1 min-w-[200px] px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
             />
 
@@ -252,137 +360,51 @@ export function GalleryPage({ onClose, onLabCreated, slug }: Props) {
             )}
           </div>
 
-          {error && (
-            <div className="p-3 bg-red-400/10 border border-red-400/20 rounded-lg text-xs text-red-400 mb-4">{error}</div>
-          )}
-
-          {/* Fork success banner */}
-          {forkResult && (
-            <div className="p-4 bg-[#00e5a0]/5 border border-[#00e5a0]/30 rounded-lg mb-4">
-              <p className="text-sm text-[#00e5a0] font-medium mb-2">Lab forked successfully!</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 bg-bg-elevated rounded p-2 text-[10px] font-mono text-white break-all">
-                  {forkResult.connectionString}
-                </code>
-                <button
-                  onClick={() => handleCopy(forkResult.connectionString)}
-                  className="text-[10px] text-accent shrink-0"
-                >
-                  Copy
-                </button>
-              </div>
-              <button
-                onClick={() => setForkResult(null)}
-                className="mt-2 text-[10px] text-[var(--muted)] hover:text-white"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* Loading */}
           {loading && (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
             </div>
           )}
 
-          {/* Empty state */}
-          {!loading && labs.length === 0 && (
+          {!loading && experiments.length === 0 && (
             <div className="text-center py-16">
-              <h3 className="text-lg font-medium text-white mb-2">No published labs yet</h3>
+              <h3 className="text-lg font-medium text-white mb-2">No published experiments yet</h3>
               <p className="text-sm text-[var(--muted)]">
-                Labs published via the CLI or snapshots will appear here.
-                {searchQuery || tagFilter || templateFilter
-                  ? ' Try adjusting your filters.'
-                  : ''}
+                Run analyses in SimLab and publish an Experiment to feature your work here.
+                {searchQuery || tagFilter || templateFilter ? ' Try adjusting your filters.' : ''}
               </p>
             </div>
           )}
 
-          {/* Gallery Grid */}
-          {!loading && labs.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {labs.map((lab) => (
-                <div
-                  key={lab.id}
+          {!loading && experiments.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {experiments.map((exp) => (
+                <a
+                  key={exp.id}
+                  href={`#gallery/${exp.slug}`}
                   className="bg-bg-card border border-[var(--border)] rounded-lg p-4 hover:border-accent/30 transition-colors flex flex-col"
                 >
-                  {/* Title & Author */}
-                  <h3 className="text-sm font-semibold text-white mb-1 line-clamp-1">{lab.title}</h3>
-                  <p className="text-[10px] text-[var(--muted)] mb-2">
-                    by {lab.authors || 'Anonymous'}
-                  </p>
+                  <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1">Question</p>
+                  <h3 className="text-sm font-semibold text-white mb-1 line-clamp-2">{exp.title}</h3>
+                  {exp.question && <p className="text-xs text-[var(--muted)] mb-3 line-clamp-2">{exp.question}</p>}
 
-                  {/* Description */}
-                  {lab.description && (
-                    <p className="text-xs text-[var(--muted)] mb-3 line-clamp-2">{lab.description}</p>
-                  )}
-
-                  {/* Metadata row */}
                   <div className="flex flex-wrap items-center gap-2 mb-3 text-[10px] text-[var(--muted)]">
-                    <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{lab.template}</span>
-                    {lab.rows > 0 && (
+                    <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{exp.template}</span>
+                    {exp.rows > 0 && (
                       <span className="bg-bg-elevated px-1.5 py-0.5 rounded">
-                        {lab.rows >= 1000 ? `${lab.rows / 1000}K` : lab.rows} rows
-                      </span>
-                    )}
-                    {lab.tables_count > 0 && (
-                      <span className="bg-bg-elevated px-1.5 py-0.5 rounded">
-                        {lab.tables_count} tables
+                        {exp.rows >= 1000 ? `${exp.rows / 1000}K` : exp.rows} rows
                       </span>
                     )}
                   </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-3 text-[10px] text-[var(--muted)] mb-3">
-                    <span>{lab.view_count ?? 0} views</span>
-                    <span>{lab.fork_count ?? 0} forks</span>
-                    {lab.license && <span>{lab.license}</span>}
-                  </div>
-
-                  {/* Tags */}
-                  {lab.tags && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {lab.tags.split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-                        <span
-                          key={tag}
-                          onClick={() => setTagFilter(tag)}
-                          className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded cursor-pointer hover:bg-accent/20"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Spacer */}
                   <div className="flex-1" />
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)]">
-                    <button
-                      onClick={() => handleFork(lab.slug)}
-                      disabled={forking === lab.slug}
-                      className="flex-1 px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
-                    >
-                      {forking === lab.slug ? 'Forking...' : 'Fork Lab'}
-                    </button>
-                    <a
-                      href={`${LAB_API_URL}/v1/labs/${lab.id}/export?format=notebook`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 text-[11px] text-[var(--muted)] border border-[var(--border)] rounded-lg hover:text-white hover:border-white/30 transition-colors"
-                    >
-                      .ipynb
-                    </a>
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-[10px] text-[var(--muted)]">
+                    <span>by {exp.authors || 'Anonymous'}</span>
+                    <span>{exp.view_count ?? 0} views &middot; {exp.fork_count ?? 0} forks</span>
                   </div>
-
-                  {/* Published date */}
-                  <p className="text-[9px] text-[var(--muted)] mt-2">
-                    {new Date(lab.published_at).toLocaleDateString()}
-                  </p>
-                </div>
+                  <p className="text-[9px] text-[var(--muted)] mt-2">{new Date(exp.published_at).toLocaleDateString()}</p>
+                </a>
               ))}
             </div>
           )}
