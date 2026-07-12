@@ -363,6 +363,19 @@ export async function browseGallery(params?: {
 }
 
 /**
+ * Get a single published lab from the gallery by slug.
+ */
+export async function getGalleryLab(slug: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/gallery/${slug}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fork a published lab from the gallery.
  */
 export async function forkGalleryLab(slug: string, name?: string): Promise<CreateLabResult | null> {

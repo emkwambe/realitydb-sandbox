@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   browseGallery,
   forkGalleryLab,
+  getGalleryLab,
 } from '../services/cloudSandboxService';
 
 interface Props {
   onClose: () => void;
   onLabCreated?: (connectionString: string) => void;
+  slug?: string;
 }
 
 interface PublishedLab {
@@ -27,7 +29,7 @@ interface PublishedLab {
 
 const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || 'https://realitydb-lab-api.eddy-078.workers.dev';
 
-export function GalleryPage({ onClose, onLabCreated }: Props) {
+export function GalleryPage({ onClose, onLabCreated, slug }: Props) {
   const [labs, setLabs] = useState<PublishedLab[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,9 +39,28 @@ export function GalleryPage({ onClose, onLabCreated }: Props) {
   const [forkResult, setForkResult] = useState<{ slug: string; connectionString: string } | null>(null);
   const [error, setError] = useState('');
 
+  const [detailLab, setDetailLab] = useState<PublishedLab | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+
   useEffect(() => {
+    if (!slug) return;
+    setDetailLoading(true);
+    setDetailError('');
+    getGalleryLab(slug).then((lab) => {
+      if (!lab) {
+        setDetailError('Lab not found.');
+      } else {
+        setDetailLab(lab as unknown as PublishedLab);
+      }
+      setDetailLoading(false);
+    });
+  }, [slug]);
+
+  useEffect(() => {
+    if (slug) return;
     loadGallery();
-  }, [tagFilter, templateFilter, searchQuery]);
+  }, [tagFilter, templateFilter, searchQuery, slug]);
 
   async function loadGallery() {
     setLoading(true);
@@ -89,6 +110,111 @@ export function GalleryPage({ onClose, onLabCreated }: Props) {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto">
+          {slug && (
+            <div className="mb-6">
+              <button
+                onClick={onClose}
+                className="text-xs text-[var(--muted)] hover:text-white mb-4"
+              >
+                &larr; Back to gallery
+              </button>
+
+              {detailLoading && (
+                <div className="flex items-center justify-center py-16">
+                  <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
+                </div>
+              )}
+
+              {!detailLoading && detailError && (
+                <div className="text-center py-16">
+                  <h3 className="text-lg font-medium text-white mb-2">{detailError}</h3>
+                  <p className="text-sm text-[var(--muted)]">This lab may have been unpublished.</p>
+                </div>
+              )}
+
+              {!detailLoading && detailLab && (
+                <div className="bg-bg-card border border-[var(--border)] rounded-lg p-6 max-w-2xl">
+                  <h3 className="text-xl font-semibold text-white mb-1">{detailLab.title}</h3>
+                  <p className="text-xs text-[var(--muted)] mb-4">by {detailLab.authors || 'Anonymous'}</p>
+
+                  {detailLab.description && (
+                    <p className="text-sm text-[var(--muted)] mb-4">{detailLab.description}</p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 mb-4 text-[10px] text-[var(--muted)]">
+                    <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{detailLab.template}</span>
+                    {detailLab.rows > 0 && (
+                      <span className="bg-bg-elevated px-1.5 py-0.5 rounded">
+                        {detailLab.rows >= 1000 ? `${detailLab.rows / 1000}K` : detailLab.rows} rows
+                      </span>
+                    )}
+                    {detailLab.tables_count > 0 && (
+                      <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{detailLab.tables_count} tables</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-[10px] text-[var(--muted)] mb-4">
+                    <span>{detailLab.view_count ?? 0} views</span>
+                    <span>{detailLab.fork_count ?? 0} forks</span>
+                    {detailLab.license && <span>{detailLab.license}</span>}
+                  </div>
+
+                  {detailLab.tags && (
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {detailLab.tags.split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
+                        <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="p-3 bg-red-400/10 border border-red-400/20 rounded-lg text-xs text-red-400 mb-4">{error}</div>
+                  )}
+
+                  {forkResult ? (
+                    <div className="p-4 bg-[#00e5a0]/5 border border-[#00e5a0]/30 rounded-lg">
+                      <p className="text-sm text-[#00e5a0] font-medium mb-2">Lab forked successfully!</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-bg-elevated rounded p-2 text-[10px] font-mono text-white break-all">
+                          {forkResult.connectionString}
+                        </code>
+                        <button onClick={() => handleCopy(forkResult.connectionString)} className="text-[10px] text-accent shrink-0">
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 pt-4 border-t border-[var(--border)]">
+                      <button
+                        onClick={() => handleFork(detailLab.slug)}
+                        disabled={forking === detailLab.slug}
+                        className="flex-1 px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                      >
+                        {forking === detailLab.slug ? 'Forking...' : 'Fork Lab'}
+                      </button>
+                      <a
+                        href={`${LAB_API_URL}/v1/labs/${detailLab.id}/export?format=notebook`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 text-[11px] text-[var(--muted)] border border-[var(--border)] rounded-lg hover:text-white hover:border-white/30 transition-colors"
+                      >
+                        .ipynb
+                      </a>
+                    </div>
+                  )}
+
+                  <p className="text-[9px] text-[var(--muted)] mt-4">
+                    {new Date(detailLab.published_at).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!slug && (
+          <>
           {/* Search & Filters */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
             <input
@@ -259,6 +385,8 @@ export function GalleryPage({ onClose, onLabCreated }: Props) {
                 </div>
               ))}
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

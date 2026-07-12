@@ -16,8 +16,13 @@ type Route = 'home' | 'data-store' | 'simlab' | 'gallery' | 'pricing';
 const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'gallery', 'pricing'];
 
 function routeFromHash(): Route {
-  const h = window.location.hash.replace(/^#\/?/, '') as Route;
+  const h = window.location.hash.replace(/^#\/?/, '').split('/')[0] as Route;
   return ROUTES.includes(h) ? h : 'home';
+}
+
+function gallerySlugFromHash(): string | null {
+  const h = window.location.hash;
+  return h.startsWith('#gallery/') ? decodeURIComponent(h.slice('#gallery/'.length)) : null;
 }
 
 const NAV_ITEMS: { id: Route; label: string }[] = [
@@ -119,17 +124,22 @@ function Navbar({
 function Shell() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   const [routeParams, setRouteParams] = useState<Record<string, unknown>>({});
+  const [gallerySlug, setGallerySlug] = useState<string | null>(gallerySlugFromHash);
 
   const navigate = useCallback((r: Route, params?: Record<string, unknown>) => {
     window.location.hash = r === 'home' ? '' : r;
     setRoute(r);
     setRouteParams(params ?? {});
+    setGallerySlug(null);
     window.scrollTo({ top: 0 });
   }, []);
 
   // Sync with browser back/forward + manual hash edits.
   useEffect(() => {
-    const onHash = () => setRoute(routeFromHash());
+    const onHash = () => {
+      setRoute(routeFromHash());
+      setGallerySlug(gallerySlugFromHash());
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -150,7 +160,7 @@ function Shell() {
           onNavigate={(r, params) => navigate(r as Route, params)}
         />
       )}
-      {route === 'gallery' && <GalleryPage onClose={() => navigate('home')} />}
+      {route === 'gallery' && <GalleryPage onClose={() => navigate('home')} slug={gallerySlug ?? undefined} />}
       {route === 'simlab' && (
         <SimLabPage
           onClose={() => navigate('home')}
