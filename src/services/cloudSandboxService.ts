@@ -456,13 +456,14 @@ export async function getExperimentReferences(experimentId: string, accessToken?
 }
 
 /**
- * Attach a citation — "this experiment builds upon <sourceExperimentId>".
- * Requires reviewer-or-above access on this experiment (the target),
- * enforced server-side — attaching a reference is a credibility claim.
+ * Attach a citation — "sourceExperimentId builds upon targetExperimentId".
+ * This is an edit to the SOURCE experiment, so sourceExperimentId is the
+ * one whose editor-or-above access is checked server-side. Rejects
+ * self-references and duplicates (same source+target pair).
  */
-export async function addExperimentReference(experimentId: string, accessToken: string, fields: { sourceExperimentId?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function addExperimentReference(sourceExperimentId: string, accessToken: string, fields: { targetExperimentId: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/references`, {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${sourceExperimentId}/references`, {
       method: 'POST',
       headers: getExperimentHeaders(accessToken),
       body: JSON.stringify(fields),
@@ -472,6 +473,22 @@ export async function addExperimentReference(experimentId: string, accessToken: 
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message || 'Network error' };
+  }
+}
+
+/**
+ * Remove a citation — same authorization as creating one: editor-or-above
+ * on the reference's source experiment.
+ */
+export async function removeExperimentReference(sourceExperimentId: string, referenceId: string, accessToken: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${sourceExperimentId}/references/${referenceId}`, {
+      method: 'DELETE',
+      headers: getExperimentHeaders(accessToken),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

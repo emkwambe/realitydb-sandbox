@@ -15,6 +15,7 @@ import {
   getRelatedExperiments,
   getExperimentReferences,
   addExperimentReference,
+  removeExperimentReference,
 } from '../services/cloudSandboxService';
 
 interface Props {
@@ -138,10 +139,11 @@ export function GalleryPage({ onClose, slug }: Props) {
   const [related, setRelated] = useState<ExperimentSummary[]>([]);
   const [references, setReferences] = useState<{ citedBy: ReferenceItem[]; cites: ReferenceItem[] }>({ citedBy: [], cites: [] });
   const [citeExpanded, setCiteExpanded] = useState<'bibtex' | 'apa' | 'mla' | null>(null);
-  const [citeSourceSlug, setCiteSourceSlug] = useState('');
+  const [citeTargetSlug, setCiteTargetSlug] = useState('');
   const [citeNote, setCiteNote] = useState('');
   const [citeSubmitting, setCiteSubmitting] = useState(false);
   const [citeError, setCiteError] = useState('');
+  const [citeRemovingId, setCiteRemovingId] = useState<string | null>(null);
 
   function requireAuth(): boolean {
     if (!user) { setShowAuth(true); return false; }
@@ -217,25 +219,33 @@ export function GalleryPage({ onClose, slug }: Props) {
     if (ok) setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, status } : r)));
   }
 
-  // Records "the Experiment at citeSourceSlug cites this one" — the
-  // endpoint always treats the current Experiment as the citation target,
-  // so this can only ever add to "Referenced By," never "Builds Upon"
-  // (recording an outgoing citation requires reviewer access to the OTHER
-  // experiment, which this page has no way to check).
+  // Records "this Experiment (detail) builds upon the Experiment at
+  // citeTargetSlug" — an edit to detail itself, so it requires editor
+  // access on detail, not any permission from the target. Appears
+  // immediately under detail's own "Builds Upon" list; the target's
+  // "Referenced By" list derives from the same row automatically.
   async function handleAddCitation() {
     if (!requireAuth() || !detail || !accessToken) return;
-    if (!citeSourceSlug.trim()) { setCiteError('Enter the slug of the Experiment that cites this one.'); return; }
+    if (!citeTargetSlug.trim()) { setCiteError('Enter the slug of the Experiment this one builds upon.'); return; }
     setCiteSubmitting(true);
     setCiteError('');
-    const source = await getExperiment(citeSourceSlug.trim(), accessToken);
-    if (!source) { setCiteError('No published Experiment found with that slug.'); setCiteSubmitting(false); return; }
-    const result = await addExperimentReference(detail.id, accessToken, { sourceExperimentId: source.id as string, note: citeNote.trim() || undefined });
+    const target = await getExperiment(citeTargetSlug.trim(), accessToken);
+    if (!target) { setCiteError('No published Experiment found with that slug.'); setCiteSubmitting(false); return; }
+    const result = await addExperimentReference(detail.id, accessToken, { targetExperimentId: target.id as string, note: citeNote.trim() || undefined });
     if (!result.ok) { setCiteError(result.error || 'Failed to add citation.'); setCiteSubmitting(false); return; }
-    setCiteSourceSlug('');
+    setCiteTargetSlug('');
     setCiteNote('');
     const refs = await getExperimentReferences(detail.id, accessToken);
     setReferences(refs as unknown as { citedBy: ReferenceItem[]; cites: ReferenceItem[] });
     setCiteSubmitting(false);
+  }
+
+  async function handleRemoveCitation(referenceId: string) {
+    if (!detail || !accessToken) return;
+    setCiteRemovingId(referenceId);
+    const ok = await removeExperimentReference(detail.id, referenceId, accessToken);
+    if (ok) setReferences((prev) => ({ ...prev, cites: prev.cites.filter((r) => r.id !== referenceId) }));
+    setCiteRemovingId(null);
   }
 
   useEffect(() => {
@@ -682,25 +692,36 @@ export function GalleryPage({ onClose, slug }: Props) {
                         ) : (
                           <div className="space-y-1.5">
                             {references.cites.map((r) => (
-                              <div key={r.id} className="text-[11px]">
-                                <a href={`#gallery/${r.other_slug}`} className="text-accent hover:underline">{r.other_title}</a>
-                                {r.note && <span className="text-[var(--muted)]"> — {r.note}</span>}
+                              <div key={r.id} className="text-[11px] flex items-center justify-between gap-2">
+                                <span>
+                                  <a href={`#gallery/${r.other_slug}`} className="text-accent hover:underline">{r.other_title}</a>
+                                  {r.note && <span className="text-[var(--muted)]"> — {r.note}</span>}
+                                </span>
+                                {(detail.viewerAccess === 'owner' || detail.viewerAccess === 'editor') && (
+                                  <button
+                                    onClick={() => handleRemoveCitation(r.id)}
+                                    disabled={citeRemovingId === r.id}
+                                    className="text-[9px] text-[var(--muted)] hover:text-red-400 shrink-0 disabled:opacity-50"
+                                  >
+                                    {citeRemovingId === r.id ? 'Removing...' : 'Remove'}
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
 
-                      {(detail.viewerAccess === 'owner' || detail.viewerAccess === 'editor' || detail.viewerAccess === 'reviewer') && (
+                      {(detail.viewerAccess === 'owner' || detail.viewerAccess === 'editor') && (
                         <div className="pt-2 border-t border-[var(--border)]">
-                          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1.5">Record a citation</p>
-                          <p className="text-[10px] text-[var(--muted)] mb-2">Enter the slug of a published Experiment that cites this one.</p>
+                          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1.5">Add a citation</p>
+                          <p className="text-[10px] text-[var(--muted)] mb-2">Enter the slug of a published Experiment this one builds upon.</p>
                           {citeError && <p className="text-[10px] text-red-400 mb-2">{citeError}</p>}
                           <div className="flex items-center gap-2">
                             <input
-                              value={citeSourceSlug}
-                              onChange={(e) => setCiteSourceSlug(e.target.value)}
-                              placeholder="citing-experiment-slug"
+                              value={citeTargetSlug}
+                              onChange={(e) => setCiteTargetSlug(e.target.value)}
+                              placeholder="target-experiment-slug"
                               className="px-2 py-1.5 bg-bg-elevated border border-[var(--border)] rounded text-[11px] text-white placeholder:text-[var(--muted)] flex-1"
                             />
                             <input
