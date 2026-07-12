@@ -14,6 +14,29 @@ function EvidenceChart({ chartType, xKey, yKey, rows, accent, dark }) {
   );
 }
 
+// Write/Preview markdown field — shared shape for Findings and the three
+// optional structured sections (Key Findings, Limitations, Future Work).
+function MarkdownField({ t, inputStyle, btnGhost, h4Style, label, value, onChange, preview, setPreview, placeholder }) {
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={h4Style}>{label}</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setPreview(false)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 11, ...(!preview ? { background: t.accentBg, color: t.accent, borderColor: "transparent" } : {}) }}>Write</button>
+          <button onClick={() => setPreview(true)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 11, ...(preview ? { background: t.accentBg, color: t.accent, borderColor: "transparent" } : {}) }}>Preview</button>
+        </div>
+      </div>
+      {preview ? (
+        <div style={{ background: t.surface, border: `0.5px solid ${t.border}`, borderRadius: 8, padding: "12px 16px", minHeight: 80 }}>
+          {value.trim() ? <PublicationMarkdown content={value} /> : <span style={{ fontSize: 12, color: t.hint }}>Nothing to preview yet.</span>}
+        </div>
+      ) : (
+        <textarea style={{ ...inputStyle, width: "100%", minHeight: 80, resize: "vertical", fontFamily: "'IBM Plex Mono', monospace" }} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      )}
+    </div>
+  );
+}
+
 export default function ExperimentBuilder({ selectedLab, accessToken, userEmail, t, dark, inputStyle, selectStyle, btnPrimary, btnGhost, Label, fire }) {
   const [experimentId, setExperimentId] = useState(null);
   const [title, setTitle] = useState("");
@@ -35,6 +58,12 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
 
   const [findings, setFindings] = useState("");
   const [findingsPreview, setFindingsPreview] = useState(false);
+  const [keyFindings, setKeyFindings] = useState("");
+  const [keyFindingsPreview, setKeyFindingsPreview] = useState(false);
+  const [limitations, setLimitations] = useState("");
+  const [limitationsPreview, setLimitationsPreview] = useState(false);
+  const [futureWork, setFutureWork] = useState("");
+  const [futureWorkPreview, setFutureWorkPreview] = useState(false);
   const [authors, setAuthors] = useState(userEmail || "");
   const [tags, setTags] = useState("");
   const [visibility, setVisibility] = useState("unlisted");
@@ -138,7 +167,10 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
     try {
       await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}`, {
         method: "PATCH", headers,
-        body: JSON.stringify({ findings: findings.trim(), authors: authors.trim() || undefined, tags: tags.trim() || undefined }),
+        body: JSON.stringify({
+          findings: findings.trim(), authors: authors.trim() || undefined, tags: tags.trim() || undefined,
+          keyFindings: keyFindings.trim() || undefined, limitations: limitations.trim() || undefined, futureWork: futureWork.trim() || undefined,
+        }),
       });
       const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/publish`, {
         method: "POST", headers,
@@ -270,27 +302,44 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
         )}
 
         <div style={sectionStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={h4Style}>Findings — what did the evidence show?</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => setFindingsPreview(false)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 11, ...(!findingsPreview ? { background: t.accentBg, color: t.accent, borderColor: "transparent" } : {}) }}>Write</button>
-              <button onClick={() => setFindingsPreview(true)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 11, ...(findingsPreview ? { background: t.accentBg, color: t.accent, borderColor: "transparent" } : {}) }}>Preview</button>
-            </div>
-          </div>
-          {findingsPreview ? (
-            <div style={{ background: t.surface, border: `0.5px solid ${t.border}`, borderRadius: 8, padding: "12px 16px", minHeight: 100 }}>
-              {findings.trim() ? <PublicationMarkdown content={findings} /> : <span style={{ fontSize: 12, color: t.hint }}>Nothing to preview yet.</span>}
-            </div>
-          ) : (
-            <>
-              <textarea style={{ ...inputStyle, width: "100%", minHeight: 100, resize: "vertical", fontFamily: "'IBM Plex Mono', monospace" }} value={findings} onChange={(e) => setFindings(e.target.value)} placeholder="Summarize what you discovered, why it matters, and any follow-up questions. Markdown supported: # headings, - lists, > callouts, `code`, tables, [links](url)." />
-              <p style={{ fontSize: 10, color: t.hint, marginTop: 4 }}>Markdown supported — headings, lists, callouts, code, tables, links.</p>
-            </>
-          )}
+          <MarkdownField
+            t={t} inputStyle={inputStyle} btnGhost={btnGhost} h4Style={h4Style}
+            label="Findings — what did the evidence show?"
+            value={findings} onChange={setFindings} preview={findingsPreview} setPreview={setFindingsPreview}
+            placeholder="Summarize what you discovered, why it matters, and any follow-up questions. Markdown supported: # headings, - lists, > callouts, `code`, tables, [links](url)."
+          />
+          <p style={{ fontSize: 10, color: t.hint, marginTop: 4 }}>Markdown supported — headings, lists, callouts, code, tables, links.</p>
           <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
             <input style={{ ...inputStyle, flex: 1 }} value={authors} onChange={(e) => setAuthors(e.target.value)} placeholder="Author name" />
             <input style={{ ...inputStyle, flex: 1 }} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="tags, comma, separated" />
           </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <MarkdownField
+            t={t} inputStyle={inputStyle} btnGhost={btnGhost} h4Style={h4Style}
+            label="Key Findings (optional)"
+            value={keyFindings} onChange={setKeyFindings} preview={keyFindingsPreview} setPreview={setKeyFindingsPreview}
+            placeholder="The 2-4 most important takeaways, as a short bulleted list."
+          />
+        </div>
+
+        <div style={sectionStyle}>
+          <MarkdownField
+            t={t} inputStyle={inputStyle} btnGhost={btnGhost} h4Style={h4Style}
+            label="Limitations (optional)"
+            value={limitations} onChange={setLimitations} preview={limitationsPreview} setPreview={setLimitationsPreview}
+            placeholder="What this analysis doesn't account for, known caveats, or where the data may be incomplete."
+          />
+        </div>
+
+        <div style={sectionStyle}>
+          <MarkdownField
+            t={t} inputStyle={inputStyle} btnGhost={btnGhost} h4Style={h4Style}
+            label="Future Work (optional)"
+            value={futureWork} onChange={setFutureWork} preview={futureWorkPreview} setPreview={setFutureWorkPreview}
+            placeholder="Follow-up questions or analyses this Experiment sets up but doesn't answer."
+          />
         </div>
 
         <div style={sectionStyle}>

@@ -12,6 +12,9 @@ import {
   submitExperimentReview,
   withdrawExperimentReview,
   resolveExperimentReview,
+  getRelatedExperiments,
+  getExperimentReferences,
+  addExperimentReference,
 } from '../services/cloudSandboxService';
 
 interface Props {
@@ -53,14 +56,46 @@ interface ReviewItem {
 
 interface ExperimentDetail extends ExperimentSummary {
   findings: string;
+  key_findings: string | null;
+  limitations: string | null;
+  future_work: string | null;
   lab_version: string;
   engine_version: string;
   forked_from_id: string | null;
+  forkedFrom: { id: string; title: string; slug: string } | null;
   license: string;
   user_id: string;
   viewerAccess: 'owner' | 'editor' | 'reviewer' | 'viewer' | 'none';
   bookmarked: boolean;
   evidence: EvidenceBlock[];
+}
+
+interface ReferenceItem {
+  id: string;
+  note: string | null;
+  created_at: string;
+  other_title: string | null;
+  other_slug: string | null;
+}
+
+function estimateReadingTime(detail: ExperimentDetail): number {
+  const text = [detail.findings, detail.key_findings, detail.limitations, detail.future_work].filter(Boolean).join(' ');
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function citationUrl(slug: string): string {
+  return `${window.location.origin}${window.location.pathname}#gallery/${slug}`;
+}
+
+function formatCitations(detail: ExperimentDetail): { bibtex: string; apa: string; mla: string } {
+  const year = new Date(detail.published_at).getFullYear();
+  const author = detail.authors || 'Anonymous';
+  const url = citationUrl(detail.slug);
+  const bibtex = `@misc{${detail.slug},\n  title = {${detail.title}},\n  author = {${author}},\n  year = {${year}},\n  howpublished = {\\url{${url}}},\n  note = {RealityDB SimLab Experiment}\n}`;
+  const apa = `${author}. (${year}). ${detail.title}. RealityDB SimLab. ${url}`;
+  const mla = `${author}. "${detail.title}." RealityDB SimLab, ${year}, ${url}.`;
+  return { bibtex, apa, mla };
 }
 
 function EvidenceChartView({ block, evidence }: { block: EvidenceBlock; evidence: EvidenceBlock[] }) {
@@ -100,6 +135,14 @@ export function GalleryPage({ onClose, slug }: Props) {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState('');
 
+  const [related, setRelated] = useState<ExperimentSummary[]>([]);
+  const [references, setReferences] = useState<{ citedBy: ReferenceItem[]; cites: ReferenceItem[] }>({ citedBy: [], cites: [] });
+  const [citeExpanded, setCiteExpanded] = useState<'bibtex' | 'apa' | 'mla' | null>(null);
+  const [citeSourceSlug, setCiteSourceSlug] = useState('');
+  const [citeNote, setCiteNote] = useState('');
+  const [citeSubmitting, setCiteSubmitting] = useState(false);
+  const [citeError, setCiteError] = useState('');
+
   function requireAuth(): boolean {
     if (!user) { setShowAuth(true); return false; }
     return true;
@@ -111,11 +154,17 @@ export function GalleryPage({ onClose, slug }: Props) {
     setDetailError('');
     setForkResult(null);
     const exp = await getExperiment(slug, accessToken);
-    if (!exp) setDetailError('Experiment not found — it may have been unpublished.');
-    else setDetail(exp as unknown as ExperimentDetail);
+    if (!exp) { setDetailError('Experiment not found — it may have been unpublished.'); setDetailLoading(false); return; }
+    setDetail(exp as unknown as ExperimentDetail);
     setDetailLoading(false);
-    const rev = await getExperimentReviews(slug, accessToken);
+    const [rev, rel, refs] = await Promise.all([
+      getExperimentReviews(slug, accessToken),
+      getRelatedExperiments(slug),
+      getExperimentReferences(exp.id as string, accessToken),
+    ]);
     setReviews(rev as unknown as ReviewItem[]);
+    setRelated(rel as unknown as ExperimentSummary[]);
+    setReferences(refs as unknown as { citedBy: ReferenceItem[]; cites: ReferenceItem[] });
   }
 
   useEffect(() => {
@@ -166,6 +215,27 @@ export function GalleryPage({ onClose, slug }: Props) {
     if (!detail || !accessToken) return;
     const ok = await resolveExperimentReview(detail.id, reviewId, accessToken, status);
     if (ok) setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, status } : r)));
+  }
+
+  // Records "the Experiment at citeSourceSlug cites this one" — the
+  // endpoint always treats the current Experiment as the citation target,
+  // so this can only ever add to "Referenced By," never "Builds Upon"
+  // (recording an outgoing citation requires reviewer access to the OTHER
+  // experiment, which this page has no way to check).
+  async function handleAddCitation() {
+    if (!requireAuth() || !detail || !accessToken) return;
+    if (!citeSourceSlug.trim()) { setCiteError('Enter the slug of the Experiment that cites this one.'); return; }
+    setCiteSubmitting(true);
+    setCiteError('');
+    const source = await getExperiment(citeSourceSlug.trim(), accessToken);
+    if (!source) { setCiteError('No published Experiment found with that slug.'); setCiteSubmitting(false); return; }
+    const result = await addExperimentReference(detail.id, accessToken, { sourceExperimentId: source.id as string, note: citeNote.trim() || undefined });
+    if (!result.ok) { setCiteError(result.error || 'Failed to add citation.'); setCiteSubmitting(false); return; }
+    setCiteSourceSlug('');
+    setCiteNote('');
+    const refs = await getExperimentReferences(detail.id, accessToken);
+    setReferences(refs as unknown as { citedBy: ReferenceItem[]; cites: ReferenceItem[] });
+    setCiteSubmitting(false);
   }
 
   useEffect(() => {
@@ -256,7 +326,10 @@ export function GalleryPage({ onClose, slug }: Props) {
                       <p className="text-xs text-[var(--muted)]">
                         By <span className="text-gray-300 font-medium">{detail.authors || 'Anonymous'}</span>
                         {' · '}{new Date(detail.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-                        {detail.forked_from_id && <span> · forked experiment</span>}
+                        {' · '}{estimateReadingTime(detail)} min read
+                        {detail.forkedFrom && (
+                          <> · derived from <a href={`#gallery/${detail.forkedFrom.slug}`} className="text-accent hover:underline">{detail.forkedFrom.title}</a></>
+                        )}
                       </p>
                       <button
                         onClick={handleToggleBookmark}
@@ -342,6 +415,33 @@ export function GalleryPage({ onClose, slug }: Props) {
                       <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Findings &amp; Conclusions</p>
                       <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
                         <PublicationMarkdown content={detail.findings} />
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Key Findings / Limitations / Future Work — optional structured
+                      sections, each omitted entirely when the author left it empty. */}
+                  {detail.key_findings && (
+                    <section>
+                      <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Key Findings</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
+                        <PublicationMarkdown content={detail.key_findings} />
+                      </div>
+                    </section>
+                  )}
+                  {detail.limitations && (
+                    <section>
+                      <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Limitations</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
+                        <PublicationMarkdown content={detail.limitations} />
+                      </div>
+                    </section>
+                  )}
+                  {detail.future_work && (
+                    <section>
+                      <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Future Work</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
+                        <PublicationMarkdown content={detail.future_work} />
                       </div>
                     </section>
                   )}
@@ -509,6 +609,117 @@ export function GalleryPage({ onClose, slug }: Props) {
                         Reviewing requires reviewer access, granted by the owner. Sharing controls are coming once account-verified access ships.
                       </p>
                     )}
+                  </div>
+
+                  {/* Related Experiments — same template/author/tag overlap */}
+                  {related.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Related Experiments</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {related.map((r) => (
+                          <a
+                            key={r.id}
+                            href={`#gallery/${r.slug}`}
+                            className="bg-bg-card border border-[var(--border)] rounded-lg p-3 hover:border-accent/30 transition-colors"
+                          >
+                            <h4 className="text-xs font-medium text-white truncate">{r.title}</h4>
+                            {r.question && <p className="text-[11px] text-[var(--muted)] mt-0.5 line-clamp-2">{r.question}</p>}
+                            <div className="mt-2"><CredibilityBadges counts={r} compact /></div>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Citations — cite this work, see what cites it, record incoming citations */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Citations</p>
+                    <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4 space-y-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          {(['bibtex', 'apa', 'mla'] as const).map((fmt) => (
+                            <button
+                              key={fmt}
+                              onClick={() => setCiteExpanded(citeExpanded === fmt ? null : fmt)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold rounded-lg border transition-colors uppercase ${
+                                citeExpanded === fmt ? 'bg-accent/10 border-accent/40 text-accent' : 'border-[var(--border)] text-[var(--muted)] hover:text-white'
+                              }`}
+                            >
+                              {fmt}
+                            </button>
+                          ))}
+                        </div>
+                        {citeExpanded && (
+                          <div className="flex items-start gap-2">
+                            <pre className="flex-1 text-[10px] font-mono text-gray-300 bg-bg-elevated border border-[var(--border)] rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                              {formatCitations(detail)[citeExpanded]}
+                            </pre>
+                            <button onClick={() => handleCopy(formatCitations(detail)[citeExpanded!])} className="text-[10px] text-accent shrink-0 mt-1">Copy</button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1.5">Referenced By</p>
+                        {references.citedBy.length === 0 ? (
+                          <p className="text-[11px] text-[var(--muted)]">No recorded citations yet.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {references.citedBy.map((r) => (
+                              <div key={r.id} className="text-[11px]">
+                                {r.other_slug ? <a href={`#gallery/${r.other_slug}`} className="text-accent hover:underline">{r.other_title}</a> : <span className="text-[var(--muted)] italic">(source not published)</span>}
+                                {r.note && <span className="text-[var(--muted)]"> — {r.note}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1.5">Builds Upon</p>
+                        {references.cites.length === 0 ? (
+                          <p className="text-[11px] text-[var(--muted)]">No recorded outgoing citations.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {references.cites.map((r) => (
+                              <div key={r.id} className="text-[11px]">
+                                <a href={`#gallery/${r.other_slug}`} className="text-accent hover:underline">{r.other_title}</a>
+                                {r.note && <span className="text-[var(--muted)]"> — {r.note}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {(detail.viewerAccess === 'owner' || detail.viewerAccess === 'editor' || detail.viewerAccess === 'reviewer') && (
+                        <div className="pt-2 border-t border-[var(--border)]">
+                          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1.5">Record a citation</p>
+                          <p className="text-[10px] text-[var(--muted)] mb-2">Enter the slug of a published Experiment that cites this one.</p>
+                          {citeError && <p className="text-[10px] text-red-400 mb-2">{citeError}</p>}
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={citeSourceSlug}
+                              onChange={(e) => setCiteSourceSlug(e.target.value)}
+                              placeholder="citing-experiment-slug"
+                              className="px-2 py-1.5 bg-bg-elevated border border-[var(--border)] rounded text-[11px] text-white placeholder:text-[var(--muted)] flex-1"
+                            />
+                            <input
+                              value={citeNote}
+                              onChange={(e) => setCiteNote(e.target.value)}
+                              placeholder="Note (optional)"
+                              className="px-2 py-1.5 bg-bg-elevated border border-[var(--border)] rounded text-[11px] text-white placeholder:text-[var(--muted)] flex-1"
+                            />
+                            <button
+                              onClick={handleAddCitation}
+                              disabled={citeSubmitting}
+                              className="px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 shrink-0"
+                            >
+                              {citeSubmitting ? 'Adding...' : 'Add'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </article>
               )}

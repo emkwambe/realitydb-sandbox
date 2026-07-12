@@ -426,6 +426,56 @@ export async function getExperiment(slug: string, accessToken?: string): Promise
 }
 
 /**
+ * Related Experiments — same template/author/tag-overlap heuristic,
+ * scoped to a single Experiment's landing page. Public read.
+ */
+export async function getRelatedExperiments(slug: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}/related`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.related ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Citation graph for an Experiment — citedBy (other experiments citing
+ * this one) and cites (experiments this one cites), each row carrying the
+ * other experiment's title/slug already joined in server-side.
+ */
+export async function getExperimentReferences(experimentId: string, accessToken?: string): Promise<{ citedBy: Array<Record<string, unknown>>; cites: Array<Record<string, unknown>> }> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/references`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return { citedBy: [], cites: [] };
+    return await res.json();
+  } catch {
+    return { citedBy: [], cites: [] };
+  }
+}
+
+/**
+ * Attach a citation — "this experiment builds upon <sourceExperimentId>".
+ * Requires reviewer-or-above access on this experiment (the target),
+ * enforced server-side — attaching a reference is a credibility claim.
+ */
+export async function addExperimentReference(experimentId: string, accessToken: string, fields: { sourceExperimentId?: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/references`, {
+      method: 'POST',
+      headers: getExperimentHeaders(accessToken),
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `Failed (${res.status})` };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Network error' };
+  }
+}
+
+/**
  * Edit an evidence block's title/description/tags (e.g. give a chart a
  * real title and description instead of its auto-generated one). Requires
  * editor-or-above access on the parent experiment, enforced server-side.
