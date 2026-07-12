@@ -88,7 +88,7 @@ function normalizeLab(lab) {
   };
 }
 
-export default function SimLab({ onClose, onGallery }) {
+export default function SimLab({ onClose, onGallery, userId, userEmail, onRequestAuth }) {
   const [dark, setDark] = useState(true);
   const [tab, setTab] = useState("sandboxes");
   const [menuOpen, setMenuOpen] = useState(null);
@@ -892,7 +892,12 @@ workflows:
         <div style={{ fontSize: 15, fontWeight: 600 }}>Experiment</div>
         <span style={{ fontSize: 11, color: t.hint }}>Ask a question, run analyses, publish evidence-backed findings</span>
       </div>
-      {sandboxes.length === 0 ? (
+      {!userId ? (
+        <div style={{ padding: 24, textAlign: "center", color: t.muted, fontSize: 13 }}>
+          <p style={{ marginBottom: 12 }}>Sign in to start an Experiment — published work is attributed to your account.</p>
+          <button onClick={onRequestAuth} style={btnPrimary}>Sign in</button>
+        </div>
+      ) : sandboxes.length === 0 ? (
         <div style={{ padding: 24, textAlign: "center", color: t.muted, fontSize: 13 }}>Create a lab first.</div>
       ) : (
         <>
@@ -904,6 +909,7 @@ workflows:
           </div>
           <ExperimentBuilder
             selectedLab={selectedLab}
+            userId={userId} userEmail={userEmail}
             t={t} dark={dark}
             inputStyle={inputStyle} selectStyle={selectStyle}
             btnPrimary={btnPrimary} btnGhost={btnGhost}

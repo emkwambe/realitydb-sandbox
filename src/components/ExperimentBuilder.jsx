@@ -53,7 +53,7 @@ function EvidenceChart({ chartType, xKey, yKey, rows, accent, dark }) {
   );
 }
 
-export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, selectStyle, btnPrimary, btnGhost, Label, fire }) {
+export default function ExperimentBuilder({ selectedLab, userId, userEmail, t, dark, inputStyle, selectStyle, btnPrimary, btnGhost, Label, fire }) {
   const [experimentId, setExperimentId] = useState(null);
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
@@ -70,8 +70,9 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
   const [addingChart, setAddingChart] = useState(false);
 
   const [findings, setFindings] = useState("");
-  const [authors, setAuthors] = useState("");
+  const [authors, setAuthors] = useState(userEmail || "");
   const [tags, setTags] = useState("");
+  const [visibility, setVisibility] = useState("unlisted");
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
 
@@ -85,7 +86,7 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
     try {
       const res = await fetch(`${LAB_API_URL}/v1/experiments`, {
         method: "POST", headers,
-        body: JSON.stringify({ title: title.trim(), question: question.trim(), labId: selectedLab.id }),
+        body: JSON.stringify({ title: title.trim(), question: question.trim(), labId: selectedLab.id, userId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Failed to start experiment (${res.status})`, "error"); setStarting(false); return; }
@@ -104,7 +105,7 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
     try {
       const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/evidence`, {
         method: "POST", headers,
-        body: JSON.stringify({ type: "sql_query", execute: true, sql: sqlDraft.trim() }),
+        body: JSON.stringify({ type: "sql_query", execute: true, sql: sqlDraft.trim(), userId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Query failed (${res.status})`, "error"); setRunning(false); return; }
@@ -136,6 +137,7 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
           type: "chart",
           title: `${chartType} chart: ${chartY} by ${chartX}`,
           data: { chartType, xKey: chartX, yKey: chartY, sourceEvidenceId: chartSourceId },
+          userId,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -156,9 +158,12 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
     try {
       await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}`, {
         method: "PATCH", headers,
-        body: JSON.stringify({ findings: findings.trim(), authors: authors.trim() || undefined, tags: tags.trim() || undefined }),
+        body: JSON.stringify({ findings: findings.trim(), authors: authors.trim() || undefined, tags: tags.trim() || undefined, userId }),
       });
-      const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/publish`, { method: "POST", headers });
+      const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/publish`, {
+        method: "POST", headers,
+        body: JSON.stringify({ visibility, userId }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Publish failed (${res.status})`, "error"); setPublishing(false); return; }
       setPublishResult(data);
@@ -288,6 +293,23 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
           </div>
         </div>
 
+        <div style={sectionStyle}>
+          <div style={h4Style}>Who can see this?</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: t.text, cursor: "pointer" }}>
+              <input type="radio" name="visibility" checked={visibility === "unlisted"} onChange={() => setVisibility("unlisted")} />
+              Unlisted — shareable via link, not listed in the gallery
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: t.text, cursor: "pointer" }}>
+              <input type="radio" name="visibility" checked={visibility === "public"} onChange={() => setVisibility("public")} />
+              Public — listed in the Experiment Gallery
+            </label>
+          </div>
+          <p style={{ fontSize: 10, color: t.hint, marginTop: 8 }}>
+            Private, workspace, and specific-person sharing are coming once account-verified access controls ship.
+          </p>
+        </div>
+
         <button onClick={handlePublish} disabled={publishing} style={{ ...btnPrimary, background: t.info, opacity: publishing ? 0.6 : 1, cursor: publishing ? "wait" : "pointer" }}>
           {publishing ? "Publishing…" : "Publish Experiment"}
         </button>
@@ -298,7 +320,8 @@ export default function ExperimentBuilder({ selectedLab, t, dark, inputStyle, se
   // ── Step 3: published ────────────────────────────────────────────────────
   return (
     <div style={{ ...sectionStyle, border: `0.5px solid ${t.info}` }}>
-      <div style={{ fontSize: 13, color: t.info, fontWeight: 600, marginBottom: 8 }}>✓ Published to the Experiment Gallery</div>
+      <div style={{ fontSize: 13, color: t.info, fontWeight: 600, marginBottom: 4 }}>✓ Published to the Experiment Gallery</div>
+      <div style={{ fontSize: 10, color: t.hint, marginBottom: 8 }}>Visibility: {publishResult.visibility}</div>
       <a href={`#gallery/${publishResult.slug}`} style={{ fontSize: 12, color: t.info, textDecoration: "underline" }}>
         View in gallery →
       </a>

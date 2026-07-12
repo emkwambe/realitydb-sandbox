@@ -504,7 +504,7 @@ export function SimLabPage({ onClose, onGallery, preloadTemplate, preloadRows }:
 
       {showManage && (
         <div className="fixed inset-0 z-[60] overflow-auto bg-[#0a0f1a]">
-          <SimLabV3 onClose={() => setShowManage(false)} onGallery={onGallery} />
+          <SimLabV3 onClose={() => setShowManage(false)} onGallery={onGallery} userId={user?.id} userEmail={user?.email} onRequestAuth={() => setShowAuth(true)} />
         </div>
       )}
     </div>

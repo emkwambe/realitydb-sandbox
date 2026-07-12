@@ -3,10 +3,18 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
+import { useAuth } from '../contexts/AuthContext';
+import AuthModal from './AuthModal';
 import {
   browseExperiments,
   getExperiment,
   forkExperiment,
+  setExperimentBookmark,
+  submitReproduction,
+  getExperimentReviews,
+  submitExperimentReview,
+  withdrawExperimentReview,
+  resolveExperimentReview,
 } from '../services/cloudSandboxService';
 
 interface Props {
@@ -36,12 +44,25 @@ interface ExperimentSummary {
   published_at: string;
 }
 
+interface ReviewItem {
+  id: string;
+  evidence_id: string | null;
+  reviewer_user_id: string;
+  review_type: 'suggestion' | 'question' | 'concern' | 'endorsement';
+  content: string;
+  status: 'open' | 'addressed' | 'dismissed';
+  created_at: string;
+}
+
 interface ExperimentDetail extends ExperimentSummary {
   findings: string;
   lab_version: string;
   engine_version: string;
   forked_from_id: string | null;
   license: string;
+  user_id: string;
+  viewerAccess: 'owner' | 'editor' | 'reviewer' | 'viewer' | 'none';
+  bookmarked: boolean;
   evidence: EvidenceBlock[];
 }
 
@@ -94,6 +115,9 @@ function EvidenceChartView({ block, evidence }: { block: EvidenceBlock; evidence
 }
 
 export function GalleryPage({ onClose, slug }: Props) {
+  const { user } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
+
   const [experiments, setExperiments] = useState<ExperimentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,17 +131,86 @@ export function GalleryPage({ onClose, slug }: Props) {
   const [forking, setForking] = useState(false);
   const [forkResult, setForkResult] = useState<{ connectionString: string } | null>(null);
 
-  useEffect(() => {
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
+  const [reproMatched, setReproMatched] = useState<boolean | null>(null);
+  const [reproNotes, setReproNotes] = useState('');
+  const [reproSubmitting, setReproSubmitting] = useState(false);
+  const [reproSubmitted, setReproSubmitted] = useState(false);
+
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [reviewType, setReviewType] = useState<'suggestion' | 'question' | 'concern' | 'endorsement'>('suggestion');
+  const [reviewContent, setReviewContent] = useState('');
+  const [reviewEvidenceId, setReviewEvidenceId] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+
+  function requireAuth(): boolean {
+    if (!user) { setShowAuth(true); return false; }
+    return true;
+  }
+
+  async function loadDetail() {
     if (!slug) return;
     setDetailLoading(true);
     setDetailError('');
     setForkResult(null);
-    getExperiment(slug).then((exp) => {
-      if (!exp) setDetailError('Experiment not found — it may have been unpublished.');
-      else setDetail(exp as unknown as ExperimentDetail);
-      setDetailLoading(false);
-    });
-  }, [slug]);
+    const exp = await getExperiment(slug, user?.id);
+    if (!exp) setDetailError('Experiment not found — it may have been unpublished.');
+    else setDetail(exp as unknown as ExperimentDetail);
+    setDetailLoading(false);
+    const rev = await getExperimentReviews(slug, user?.id);
+    setReviews(rev as unknown as ReviewItem[]);
+  }
+
+  useEffect(() => {
+    loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, user?.id]);
+
+  async function handleToggleBookmark() {
+    if (!requireAuth() || !detail || !user) return;
+    setBookmarkBusy(true);
+    const next = !detail.bookmarked;
+    const ok = await setExperimentBookmark(detail.id, user.id, next);
+    if (ok) setDetail((d) => (d ? { ...d, bookmarked: next } : d));
+    setBookmarkBusy(false);
+  }
+
+  async function handleSubmitReproduction() {
+    if (!requireAuth() || !detail || !user || reproMatched === null) return;
+    setReproSubmitting(true);
+    const ok = await submitReproduction(detail.id, user.id, reproMatched, reproNotes.trim() || undefined);
+    if (ok) setReproSubmitted(true);
+    setReproSubmitting(false);
+  }
+
+  async function handleSubmitReview() {
+    if (!requireAuth() || !detail || !user) return;
+    if (!reviewContent.trim()) { setReviewError('Write your suggestion, question, or concern first.'); return; }
+    setReviewSubmitting(true);
+    setReviewError('');
+    const result = await submitExperimentReview(detail.id, user.id, reviewType, reviewContent.trim(), reviewEvidenceId || undefined);
+    if (!result.ok) {
+      setReviewError(result.error || 'Failed to submit review.');
+    } else {
+      setReviewContent('');
+      const rev = await getExperimentReviews(slug!, user.id);
+      setReviews(rev as unknown as ReviewItem[]);
+    }
+    setReviewSubmitting(false);
+  }
+
+  async function handleWithdrawReview(reviewId: string) {
+    if (!detail || !user) return;
+    const ok = await withdrawExperimentReview(detail.id, reviewId, user.id);
+    if (ok) setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+  }
+
+  async function handleResolveReview(reviewId: string, status: 'addressed' | 'dismissed') {
+    if (!detail || !user) return;
+    const ok = await resolveExperimentReview(detail.id, reviewId, user.id, status);
+    if (ok) setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, status } : r)));
+  }
 
   useEffect(() => {
     if (slug) return;
@@ -136,10 +229,10 @@ export function GalleryPage({ onClose, slug }: Props) {
   }
 
   async function handleFork() {
-    if (!detail) return;
+    if (!requireAuth() || !detail || !user) return;
     setForking(true);
     setError('');
-    const result = await forkExperiment(detail.slug);
+    const result = await forkExperiment(detail.slug, user.id);
     if (!result) {
       setError('Failed to fork experiment. Try again.');
       setForking(false);
@@ -194,14 +287,27 @@ export function GalleryPage({ onClose, slug }: Props) {
               {!detailLoading && detail && (
                 <div className="space-y-5">
                   {/* Question */}
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1">Question</p>
-                    <h1 className="text-2xl font-bold text-white mb-1">{detail.title}</h1>
-                    {detail.question && <p className="text-sm text-[var(--muted)]">{detail.question}</p>}
-                    <p className="text-xs text-[var(--muted)] mt-2">
-                      by {detail.authors || 'Anonymous'} &middot; {new Date(detail.published_at).toLocaleDateString()}
-                      {detail.forked_from_id && <span> &middot; forked experiment</span>}
-                    </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1">Question</p>
+                      <h1 className="text-2xl font-bold text-white mb-1">{detail.title}</h1>
+                      {detail.question && <p className="text-sm text-[var(--muted)]">{detail.question}</p>}
+                      <p className="text-xs text-[var(--muted)] mt-2">
+                        by {detail.authors || 'Anonymous'} &middot; {new Date(detail.published_at).toLocaleDateString()}
+                        {detail.forked_from_id && <span> &middot; forked experiment</span>}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleToggleBookmark}
+                      disabled={bookmarkBusy}
+                      className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${
+                        detail.bookmarked
+                          ? 'bg-accent/10 border-accent/40 text-accent'
+                          : 'border-[var(--border)] text-[var(--muted)] hover:text-white'
+                      }`}
+                    >
+                      {detail.bookmarked ? '★ Bookmarked' : '☆ Bookmark'}
+                    </button>
                   </div>
 
                   {/* Environment */}
@@ -316,6 +422,134 @@ export function GalleryPage({ onClose, slug }: Props) {
                       {detail.view_count} views &middot; {detail.fork_count} forks &middot; {detail.license}
                     </p>
                   </div>
+
+                  {/* Reproduce */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Reproduce</p>
+                    <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
+                      {reproSubmitted ? (
+                        <p className="text-sm text-[#00e5a0]">Thanks — your reproduction report has been recorded.</p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-[var(--muted)] mb-3">Re-ran this experiment yourself? Report whether your result matched.</p>
+                          <div className="flex items-center gap-2 mb-3">
+                            <button
+                              onClick={() => setReproMatched(true)}
+                              className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${reproMatched === true ? 'bg-[#00e5a0]/10 border-[#00e5a0]/40 text-[#00e5a0]' : 'border-[var(--border)] text-[var(--muted)] hover:text-white'}`}
+                            >
+                              ✓ Matched
+                            </button>
+                            <button
+                              onClick={() => setReproMatched(false)}
+                              className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${reproMatched === false ? 'bg-red-400/10 border-red-400/40 text-red-400' : 'border-[var(--border)] text-[var(--muted)] hover:text-white'}`}
+                            >
+                              ✗ Different result
+                            </button>
+                          </div>
+                          {reproMatched !== null && (
+                            <>
+                              <textarea
+                                value={reproNotes}
+                                onChange={(e) => setReproNotes(e.target.value)}
+                                placeholder="Optional notes — what you observed"
+                                className="w-full min-h-[60px] px-3 py-2 bg-bg-elevated border border-[var(--border)] rounded-lg text-xs text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50 mb-2"
+                              />
+                              <button
+                                onClick={handleSubmitReproduction}
+                                disabled={reproSubmitting}
+                                className="px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                              >
+                                {reproSubmitting ? 'Submitting...' : 'Submit reproduction report'}
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Peer Review */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Peer Review</p>
+                    <div className="space-y-2 mb-3">
+                      {reviews.length === 0 && (
+                        <p className="text-xs text-[var(--muted)]">No reviews yet.</p>
+                      )}
+                      {reviews.map((r) => (
+                        <div key={r.id} className="bg-bg-card border border-[var(--border)] rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold ${
+                              r.review_type === 'concern' ? 'bg-red-400/10 text-red-400'
+                                : r.review_type === 'endorsement' ? 'bg-[#00e5a0]/10 text-[#00e5a0]'
+                                : r.review_type === 'question' ? 'bg-[#38bdf8]/10 text-[#38bdf8]'
+                                : 'bg-accent/10 text-accent'
+                            }`}>{r.review_type}</span>
+                            <span className={`text-[9px] ${r.status === 'open' ? 'text-[var(--muted)]' : r.status === 'addressed' ? 'text-[#00e5a0]' : 'text-red-400'}`}>{r.status}</span>
+                          </div>
+                          <p className="text-xs text-white whitespace-pre-wrap">{r.content}</p>
+                          {r.evidence_id && <p className="text-[9px] text-[var(--muted)] mt-1">on evidence {r.evidence_id.slice(-6)}</p>}
+                          <div className="flex items-center gap-3 mt-2">
+                            {user && r.reviewer_user_id === user.id && (
+                              <button onClick={() => handleWithdrawReview(r.id)} className="text-[9px] text-[var(--muted)] hover:text-red-400">Withdraw</button>
+                            )}
+                            {user && detail.user_id === user.id && r.status === 'open' && (
+                              <>
+                                <button onClick={() => handleResolveReview(r.id, 'addressed')} className="text-[9px] text-[#00e5a0] hover:underline">Mark addressed</button>
+                                <button onClick={() => handleResolveReview(r.id, 'dismissed')} className="text-[9px] text-[var(--muted)] hover:underline">Dismiss</button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {detail.viewerAccess === 'owner' || detail.viewerAccess === 'editor' || detail.viewerAccess === 'reviewer' ? (
+                      <div className="bg-bg-card border border-[var(--border)] rounded-lg p-3">
+                        {reviewError && <p className="text-[10px] text-red-400 mb-2">{reviewError}</p>}
+                        <div className="flex items-center gap-2 mb-2">
+                          <select
+                            value={reviewType}
+                            onChange={(e) => setReviewType(e.target.value as typeof reviewType)}
+                            className="px-2 py-1 bg-bg-elevated border border-[var(--border)] rounded text-[11px] text-white"
+                          >
+                            <option value="suggestion">Suggestion</option>
+                            <option value="question">Question</option>
+                            <option value="concern">Concern</option>
+                            <option value="endorsement">Endorsement</option>
+                          </select>
+                          {detail.evidence.filter((e) => e.title).length > 0 && (
+                            <select
+                              value={reviewEvidenceId}
+                              onChange={(e) => setReviewEvidenceId(e.target.value)}
+                              className="px-2 py-1 bg-bg-elevated border border-[var(--border)] rounded text-[11px] text-white flex-1"
+                            >
+                              <option value="">General (not tied to specific evidence)</option>
+                              {detail.evidence.filter((e) => e.title).map((e) => (
+                                <option key={e.id} value={e.id}>{e.title}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                        <textarea
+                          value={reviewContent}
+                          onChange={(e) => setReviewContent(e.target.value)}
+                          placeholder="A specific, evidence-anchored suggestion, question, or concern — not free-form discussion."
+                          className="w-full min-h-[60px] px-3 py-2 bg-bg-elevated border border-[var(--border)] rounded-lg text-xs text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50 mb-2"
+                        />
+                        <button
+                          onClick={handleSubmitReview}
+                          disabled={reviewSubmitting}
+                          className="px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                        >
+                          {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-[var(--muted)]">
+                        Reviewing requires reviewer access, granted by the owner. Sharing controls are coming once account-verified access ships.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -412,6 +646,8 @@ export function GalleryPage({ onClose, slug }: Props) {
           )}
         </div>
       </div>
+
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} />
     </div>
   );
 }

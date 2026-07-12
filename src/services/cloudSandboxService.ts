@@ -401,10 +401,13 @@ export async function browseExperiments(params?: {
 
 /**
  * Get a single published Experiment (with full evidence) by slug.
+ * Pass userId to view non-public visibility the caller has access to, and
+ * to get back the caller's bookmark state / resolved access level.
  */
-export async function getExperiment(slug: string): Promise<Record<string, unknown> | null> {
+export async function getExperiment(slug: string, userId?: string): Promise<Record<string, unknown> | null> {
   try {
-    const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}`);
+    const url = `${LAB_API_URL}/v1/gallery/experiments/${slug}${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`;
+    const res = await fetch(url);
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -413,14 +416,122 @@ export async function getExperiment(slug: string): Promise<Record<string, unknow
 }
 
 /**
+ * Bookmark / un-bookmark an Experiment. Idempotent.
+ */
+export async function setExperimentBookmark(experimentId: string, userId: string, bookmarked: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${LAB_API_URL}/v1/experiments/${experimentId}/bookmark${bookmarked ? '' : `?userId=${encodeURIComponent(userId)}`}`,
+      bookmarked
+        ? { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) }
+        : { method: 'DELETE', headers: getHeaders() }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Report a reproduction — "I re-ran this and got a matching (or not)
+ * result."
+ */
+export async function submitReproduction(experimentId: string, userId: string, matched: boolean, notes?: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reproductions`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ userId, matched, notes }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * List structured peer reviews for an Experiment.
+ */
+export async function getExperimentReviews(experimentId: string, userId?: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const url = `${LAB_API_URL}/v1/experiments/${experimentId}/reviews${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.reviews ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Submit a structured peer review — a suggestion, question, concern, or
+ * endorsement, optionally anchored to a specific evidence block.
+ */
+export async function submitExperimentReview(
+  experimentId: string,
+  userId: string,
+  reviewType: 'suggestion' | 'question' | 'concern' | 'endorsement',
+  content: string,
+  evidenceId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ userId, reviewType, content, evidenceId }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: false, error: data.error || `Failed (${res.status})` };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Network error' };
+  }
+}
+
+/**
+ * Withdraw your own review.
+ */
+export async function withdrawExperimentReview(experimentId: string, reviewId: string, userId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews/${reviewId}?userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Owner/editor marks a review addressed or dismissed.
+ */
+export async function resolveExperimentReview(experimentId: string, reviewId: string, userId: string, status: 'addressed' | 'dismissed'): Promise<boolean> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reviews/${reviewId}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ userId, status }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fork a published Experiment — provisions a fresh lab from the same
  * template/seed/rows and clones all evidence into a new draft.
  */
-export async function forkExperiment(slug: string): Promise<{ id: string; labId: string; connectionString: string } | null> {
+export async function forkExperiment(slug: string, userId: string): Promise<{ id: string; labId: string; connectionString: string } | null> {
   try {
     const res = await fetch(`${LAB_API_URL}/v1/gallery/experiments/${slug}/fork`, {
       method: 'POST',
       headers: getHeaders(),
+      body: JSON.stringify({ userId }),
     });
     if (!res.ok) return null;
     return res.json();
