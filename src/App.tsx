@@ -4,16 +4,17 @@
 // App adapts to their existing prop signatures (onClose / onGallery).
 
 import { useState, useEffect, useCallback } from 'react';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SimLabHomePage } from './components/SimLabHomePage';
 import { SimLabPricingPage } from './components/SimLabPricingPage';
 import { DataStorePage } from './components/DataStorePage';
 import { SimLabPage } from './components/SimLabPage';
 import { GalleryPage } from './components/GalleryPage';
+import { ProfilePage } from './components/ProfilePage';
 
-type Route = 'home' | 'data-store' | 'simlab' | 'gallery' | 'pricing';
+type Route = 'home' | 'data-store' | 'simlab' | 'gallery' | 'pricing' | 'profile';
 
-const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'gallery', 'pricing'];
+const ROUTES: Route[] = ['home', 'data-store', 'simlab', 'gallery', 'pricing', 'profile'];
 
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '').split('/')[0] as Route;
@@ -39,6 +40,7 @@ function Navbar({
   current: Route;
   onNavigate: (r: Route) => void;
 }) {
+  const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -73,6 +75,16 @@ function Navbar({
               {item.label}
             </button>
           ))}
+          {user && (
+            <button
+              onClick={() => onNavigate('profile')}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                current === 'profile' ? 'text-accent' : 'text-[var(--muted)] hover:text-white'
+              }`}
+            >
+              Profile
+            </button>
+          )}
           <button
             onClick={() => onNavigate('simlab')}
             className="ml-2 rounded-lg bg-accent px-4 py-1.5 text-sm font-semibold text-black transition-opacity hover:opacity-90"
@@ -115,6 +127,14 @@ function Navbar({
               {item.label}
             </button>
           ))}
+          {user && (
+            <button
+              onClick={() => { onNavigate('profile'); setMobileOpen(false); }}
+              className={`block w-full py-2 text-left text-sm ${current === 'profile' ? 'text-accent' : 'text-[var(--muted)]'}`}
+            >
+              Profile
+            </button>
+          )}
         </nav>
       )}
     </header>
@@ -167,6 +187,17 @@ function Shell() {
           onGallery={() => navigate('gallery')}
           preloadTemplate={routeParams.template as string | undefined}
           preloadRows={routeParams.rows as number | undefined}
+        />
+      )}
+      {route === 'profile' && (
+        <ProfilePage
+          onClose={() => navigate('home')}
+          onOpenExperiment={(slug) => {
+            window.location.hash = `#gallery/${slug}`;
+            setRoute('gallery');
+            setGallerySlug(slug);
+            window.scrollTo({ top: 0 });
+          }}
         />
       )}
     </div>

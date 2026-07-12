@@ -3,6 +3,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
+import { PublicationMarkdown } from "./ExperimentUI";
 
 const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || "https://realitydb-lab-api.eddy-078.workers.dev";
 const LAB_API_KEY = import.meta.env.VITE_LAB_API_KEY || "";
@@ -70,6 +71,7 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
   const [addingChart, setAddingChart] = useState(false);
 
   const [findings, setFindings] = useState("");
+  const [findingsPreview, setFindingsPreview] = useState(false);
   const [authors, setAuthors] = useState(userEmail || "");
   const [tags, setTags] = useState("");
   const [visibility, setVisibility] = useState("unlisted");
@@ -286,8 +288,23 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
         )}
 
         <div style={sectionStyle}>
-          <div style={h4Style}>Findings — what did the evidence show?</div>
-          <textarea style={{ ...inputStyle, width: "100%", minHeight: 100, resize: "vertical" }} value={findings} onChange={(e) => setFindings(e.target.value)} placeholder="Summarize what you discovered, why it matters, and any follow-up questions." />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={h4Style}>Findings — what did the evidence show?</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setFindingsPreview(false)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 11, ...(!findingsPreview ? { background: t.accentBg, color: t.accent, borderColor: "transparent" } : {}) }}>Write</button>
+              <button onClick={() => setFindingsPreview(true)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 11, ...(findingsPreview ? { background: t.accentBg, color: t.accent, borderColor: "transparent" } : {}) }}>Preview</button>
+            </div>
+          </div>
+          {findingsPreview ? (
+            <div style={{ background: t.surface, border: `0.5px solid ${t.border}`, borderRadius: 8, padding: "12px 16px", minHeight: 100 }}>
+              {findings.trim() ? <PublicationMarkdown content={findings} /> : <span style={{ fontSize: 12, color: t.hint }}>Nothing to preview yet.</span>}
+            </div>
+          ) : (
+            <>
+              <textarea style={{ ...inputStyle, width: "100%", minHeight: 100, resize: "vertical", fontFamily: "'IBM Plex Mono', monospace" }} value={findings} onChange={(e) => setFindings(e.target.value)} placeholder="Summarize what you discovered, why it matters, and any follow-up questions. Markdown supported: # headings, - lists, > callouts, `code`, tables, [links](url)." />
+              <p style={{ fontSize: 10, color: t.hint, marginTop: 4 }}>Markdown supported — headings, lists, callouts, code, tables, links.</p>
+            </>
+          )}
           <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
             <input style={{ ...inputStyle, flex: 1 }} value={authors} onChange={(e) => setAuthors(e.target.value)} placeholder="Author name" />
             <input style={{ ...inputStyle, flex: 1 }} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="tags, comma, separated" />

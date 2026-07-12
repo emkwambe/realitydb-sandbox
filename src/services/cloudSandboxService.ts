@@ -599,3 +599,64 @@ export async function createStudentBranch(
 export const AVAILABLE_TEMPLATES = [
   { id: 'banking', name: 'Retail Banking', tables: 16, description: 'Full banking schema with accounts, transactions, loans, and compliance data' },
 ] as const;
+
+// ── Professional Profile ────────────────────────────────────────────────
+// What a signed-in user OWNS (drafts + published) and what they've DONE
+// (bookmarks, reproductions, reviews, validations) across all experiments.
+// Deliberately per-user, not per-workspace, so this is the foundation a
+// public researcher/org profile can build on later without a route change.
+
+export async function getMyExperiments(accessToken: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.experiments ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getMyBookmarks(accessToken: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/bookmarks/mine`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.bookmarks ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getMyReproductions(accessToken: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/reproductions/mine`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.reproductions ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getMyReviewsAuthored(accessToken: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/reviews/mine`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.reviews ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getMyValidations(accessToken: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/validations/mine`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.validations ?? [];
+  } catch {
+    return [];
+  }
+}

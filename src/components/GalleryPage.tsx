@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
+import { CredibilityBadges, SqlBlock, ResultTable, PublicationMarkdown, type CredibilityCounts } from './ExperimentUI';
 import {
   browseExperiments,
   getExperiment,
@@ -29,7 +30,7 @@ interface EvidenceBlock {
   data: any;
 }
 
-interface ExperimentSummary {
+interface ExperimentSummary extends CredibilityCounts {
   id: string;
   slug: string;
   title: string;
@@ -286,78 +287,82 @@ export function GalleryPage({ onClose, slug }: Props) {
               )}
 
               {!detailLoading && detail && (
-                <div className="space-y-5">
-                  {/* Question */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1">Question</p>
-                      <h1 className="text-2xl font-bold text-white mb-1">{detail.title}</h1>
-                      {detail.question && <p className="text-sm text-[var(--muted)]">{detail.question}</p>}
-                      <p className="text-xs text-[var(--muted)] mt-2">
-                        by {detail.authors || 'Anonymous'} &middot; {new Date(detail.published_at).toLocaleDateString()}
-                        {detail.forked_from_id && <span> &middot; forked experiment</span>}
+                <article className="space-y-8">
+                  {/* Masthead */}
+                  <header className="border-b border-[var(--border)] pb-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-[10px] uppercase tracking-[0.15em] text-accent font-semibold">Published Analysis</span>
+                      <span className="text-[10px] text-[var(--muted)]">&middot;</span>
+                      <span className="text-[10px] uppercase tracking-wider text-[var(--muted)]">{detail.template}</span>
+                    </div>
+                    <h1 className="text-[28px] leading-tight font-bold text-white mb-3 tracking-tight">{detail.title}</h1>
+                    {detail.question && <p className="text-[15px] text-gray-300 leading-relaxed mb-4 max-w-2xl">{detail.question}</p>}
+
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-xs text-[var(--muted)]">
+                        By <span className="text-gray-300 font-medium">{detail.authors || 'Anonymous'}</span>
+                        {' · '}{new Date(detail.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                        {detail.forked_from_id && <span> · forked experiment</span>}
+                      </p>
+                      <button
+                        onClick={handleToggleBookmark}
+                        disabled={bookmarkBusy}
+                        className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${
+                          detail.bookmarked
+                            ? 'bg-accent/10 border-accent/40 text-accent'
+                            : 'border-[var(--border)] text-[var(--muted)] hover:text-white'
+                        }`}
+                      >
+                        {detail.bookmarked ? '★ Bookmarked' : '☆ Bookmark'}
+                      </button>
+                    </div>
+
+                    <div className="mt-4">
+                      <CredibilityBadges counts={detail} />
+                    </div>
+                  </header>
+
+                  {/* Executive summary — lede pulled from findings, full text appears later */}
+                  {detail.findings && (
+                    <div className="bg-accent/5 border border-accent/20 rounded-xl px-6 py-5">
+                      <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-2">Executive Summary</p>
+                      <p className="text-[15px] text-gray-200 leading-relaxed">
+                        {detail.findings.replace(/[#*_`>-]/g, '').trim().slice(0, 280)}
+                        {detail.findings.length > 280 ? '…' : ''}
                       </p>
                     </div>
-                    <button
-                      onClick={handleToggleBookmark}
-                      disabled={bookmarkBusy}
-                      className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${
-                        detail.bookmarked
-                          ? 'bg-accent/10 border-accent/40 text-accent'
-                          : 'border-[var(--border)] text-[var(--muted)] hover:text-white'
-                      }`}
-                    >
-                      {detail.bookmarked ? '★ Bookmarked' : '☆ Bookmark'}
-                    </button>
-                  </div>
+                  )}
 
-                  {/* Environment */}
-                  <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
-                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Environment</p>
+                  {/* Environment / reproducibility manifest */}
+                  <section>
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2.5">Environment</p>
                     <div className="flex flex-wrap gap-2 text-[11px]">
-                      <span className="bg-bg-elevated px-2 py-1 rounded">template: {detail.template}</span>
-                      {detail.seed != null && <span className="bg-bg-elevated px-2 py-1 rounded">seed: {detail.seed}</span>}
-                      <span className="bg-bg-elevated px-2 py-1 rounded">rows: {detail.rows?.toLocaleString()}</span>
-                      <span className="bg-bg-elevated px-2 py-1 rounded">engine: {detail.engine_version}</span>
-                      <span className="bg-bg-elevated px-2 py-1 rounded">lab: {detail.lab_version}</span>
+                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">template: <span className="text-white">{detail.template}</span></span>
+                      {detail.seed != null && <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">seed: <span className="text-white">{detail.seed}</span></span>}
+                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">rows: <span className="text-white">{detail.rows?.toLocaleString()}</span></span>
+                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">engine: <span className="text-white">{detail.engine_version}</span></span>
                     </div>
-                  </div>
+                  </section>
 
                   {/* Method + Evidence */}
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Method &amp; Evidence</p>
-                    <div className="space-y-4">
+                  <section>
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Method &amp; Evidence</p>
+                    <div className="space-y-5">
                       {detail.evidence.filter((e) => e.type !== 'result_table').map((e) => (
-                        <div key={e.id} className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
+                        <div key={e.id} className="bg-bg-card border border-[var(--border)] rounded-xl p-5">
                           {e.type === 'sql_query' && (
                             <>
-                              {e.title && <p className="text-xs font-medium text-white mb-2">{e.title}</p>}
-                              <pre className="text-[11px] text-[var(--muted)] whitespace-pre-wrap font-mono bg-bg-elevated rounded p-3 overflow-x-auto">{e.data.sql}</pre>
+                              {e.title && <p className="text-[13px] font-semibold text-white mb-3">{e.title}</p>}
+                              <SqlBlock sql={e.data.sql} />
                               {e.data.executionTimeMs != null && (
-                                <p className="text-[10px] text-[var(--muted)] mt-1">{e.data.executionTimeMs}ms</p>
+                                <p className="text-[10px] text-[var(--muted)] mt-1.5">Executed in {e.data.executionTimeMs}ms</p>
                               )}
                               {(() => {
                                 const result = detail.evidence.find((r) => r.type === 'result_table' && r.data.sourceEvidenceId === e.id);
                                 if (!result) return null;
                                 return (
-                                  <div className="overflow-x-auto mt-3">
-                                    <table className="text-[11px] w-full">
-                                      <thead>
-                                        <tr>{result.data.columns.map((c: string) => (
-                                          <th key={c} className="text-left px-2 py-1 text-[var(--muted)] border-b border-[var(--border)]">{c}</th>
-                                        ))}</tr>
-                                      </thead>
-                                      <tbody>
-                                        {result.data.rows.slice(0, 10).map((r: any, i: number) => (
-                                          <tr key={i}>{result.data.columns.map((c: string) => (
-                                            <td key={c} className="px-2 py-1 text-white border-b border-[var(--border)]">{String(r[c])}</td>
-                                          ))}</tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                    <p className="text-[10px] text-[var(--muted)] mt-1">
-                                      {result.data.rowCount} rows{result.data.truncated ? ' (showing first 500, capped for storage)' : ''}
-                                    </p>
+                                  <div className="mt-4">
+                                    <ResultTable columns={result.data.columns} rows={result.data.rows} rowCount={result.data.rowCount} truncated={result.data.truncated} />
                                   </div>
                                 );
                               })()}
@@ -365,33 +370,33 @@ export function GalleryPage({ onClose, slug }: Props) {
                           )}
                           {e.type === 'chart' && (
                             <>
-                              {e.title && <p className="text-xs font-medium text-white mb-2">{e.title}</p>}
+                              {e.title && <p className="text-[13px] font-semibold text-white mb-3">{e.title}</p>}
                               <EvidenceChartView block={e} evidence={detail.evidence} />
                             </>
                           )}
                           {e.type === 'markdown' && (
-                            <p className="text-sm text-[var(--muted)] whitespace-pre-wrap">{e.data.content}</p>
+                            <PublicationMarkdown content={e.data.content} />
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </section>
 
-                  {/* Findings */}
+                  {/* Findings & Conclusions — full markdown */}
                   {detail.findings && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Findings</p>
-                      <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4">
-                        <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{detail.findings}</p>
+                    <section>
+                      <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Findings &amp; Conclusions</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
+                        <PublicationMarkdown content={detail.findings} />
                       </div>
-                    </div>
+                    </section>
                   )}
 
                   {/* Tags */}
                   {detail.tags && (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {detail.tags.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
-                        <span key={t} className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded">{t}</span>
+                        <span key={t} className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full">{t}</span>
                       ))}
                     </div>
                   )}
@@ -487,7 +492,7 @@ export function GalleryPage({ onClose, slug }: Props) {
                             }`}>{r.review_type}</span>
                             <span className={`text-[9px] ${r.status === 'open' ? 'text-[var(--muted)]' : r.status === 'addressed' ? 'text-[#00e5a0]' : 'text-red-400'}`}>{r.status}</span>
                           </div>
-                          <p className="text-xs text-white whitespace-pre-wrap">{r.content}</p>
+                          <div className="text-xs"><PublicationMarkdown content={r.content} /></div>
                           {r.evidence_id && <p className="text-[9px] text-[var(--muted)] mt-1">on evidence {r.evidence_id.slice(-6)}</p>}
                           <div className="flex items-center gap-3 mt-2">
                             {user && r.reviewer_user_id === user.id && (
@@ -551,7 +556,7 @@ export function GalleryPage({ onClose, slug }: Props) {
                       </p>
                     )}
                   </div>
-                </div>
+                </article>
               )}
             </div>
           )}
@@ -617,11 +622,11 @@ export function GalleryPage({ onClose, slug }: Props) {
                 <a
                   key={exp.id}
                   href={`#gallery/${exp.slug}`}
-                  className="bg-bg-card border border-[var(--border)] rounded-lg p-4 hover:border-accent/30 transition-colors flex flex-col"
+                  className="bg-bg-card border border-[var(--border)] rounded-xl p-5 hover:border-accent/30 hover:shadow-lg hover:shadow-black/10 transition-all flex flex-col"
                 >
-                  <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1">Question</p>
-                  <h3 className="text-sm font-semibold text-white mb-1 line-clamp-2">{exp.title}</h3>
-                  {exp.question && <p className="text-xs text-[var(--muted)] mb-3 line-clamp-2">{exp.question}</p>}
+                  <p className="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1.5">Question</p>
+                  <h3 className="text-[15px] font-semibold text-white mb-1.5 leading-snug line-clamp-2">{exp.title}</h3>
+                  {exp.question && <p className="text-[12px] text-[var(--muted)] mb-3 line-clamp-2 leading-relaxed">{exp.question}</p>}
 
                   <div className="flex flex-wrap items-center gap-2 mb-3 text-[10px] text-[var(--muted)]">
                     <span className="bg-bg-elevated px-1.5 py-0.5 rounded">{exp.template}</span>
@@ -632,9 +637,11 @@ export function GalleryPage({ onClose, slug }: Props) {
                     )}
                   </div>
 
+                  <div className="mb-3"><CredibilityBadges counts={exp} compact /></div>
+
                   <div className="flex-1" />
 
-                  <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-[10px] text-[var(--muted)]">
+                  <div className="flex items-center justify-between pt-3 border-t border-[var(--border)] text-[10px] text-[var(--muted)]">
                     <span>by {exp.authors || 'Anonymous'}</span>
                     <span>{exp.view_count ?? 0} views &middot; {exp.fork_count ?? 0} forks</span>
                   </div>
