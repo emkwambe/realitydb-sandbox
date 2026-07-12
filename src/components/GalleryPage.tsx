@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import { CredibilityBadges, SqlBlock, ResultTable, PublicationMarkdown, EvidenceChart, type CredibilityCounts } from './ExperimentUI';
+import { fetchDiscovery, type DiscoverySort } from '../services/discoveryService';
+import { DiscoveryToolbar } from './DiscoveryToolbar';
 import {
-  browseExperiments,
   getExperiment,
   forkExperiment,
   setExperimentBookmark,
@@ -115,6 +116,7 @@ export function GalleryPage({ onClose, slug }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [templateFilter, setTemplateFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<DiscoverySort>('recent');
   const [error, setError] = useState('');
 
   const [detail, setDetail] = useState<ExperimentDetail | null>(null);
@@ -251,15 +253,16 @@ export function GalleryPage({ onClose, slug }: Props) {
   useEffect(() => {
     if (slug) return;
     loadGallery();
-  }, [tagFilter, templateFilter, searchQuery, slug]);
+  }, [tagFilter, templateFilter, searchQuery, sortOrder, slug]);
 
   async function loadGallery() {
     setLoading(true);
-    const params: { tag?: string; template?: string; q?: string } = {};
-    if (tagFilter) params.tag = tagFilter;
-    if (templateFilter) params.template = templateFilter;
-    if (searchQuery) params.q = searchQuery;
-    const result = await browseExperiments(params);
+    const result = await fetchDiscovery('experiments', {
+      tag: tagFilter || undefined,
+      template: templateFilter || undefined,
+      q: searchQuery || undefined,
+      sort: sortOrder,
+    });
     setExperiments(result as unknown as ExperimentSummary[]);
     setLoading(false);
   }
@@ -281,11 +284,6 @@ export function GalleryPage({ onClose, slug }: Props) {
   function handleCopy(text: string) {
     navigator.clipboard.writeText(text);
   }
-
-  const allTags = Array.from(
-    new Set(experiments.flatMap((e) => e.tags ? e.tags.split(',').map((t) => t.trim()).filter(Boolean) : []))
-  );
-  const allTemplates = Array.from(new Set(experiments.map((e) => e.template).filter(Boolean)));
 
   return (
     <div className="fixed inset-0 z-50 bg-bg flex flex-col">
@@ -750,41 +748,14 @@ export function GalleryPage({ onClose, slug }: Props) {
           {/* ── LIST VIEW ───────────────────────────────────────────── */}
           {!slug && (
           <>
-          <div className="flex flex-wrap items-center gap-3 mb-6">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search experiments..."
-              className="flex-1 min-w-[200px] px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
-            />
-
-            {allTemplates.length > 0 && (
-              <select
-                value={templateFilter}
-                onChange={(e) => setTemplateFilter(e.target.value)}
-                className="px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white focus:outline-none focus:border-accent/50"
-              >
-                <option value="">All Templates</option>
-                {allTemplates.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            )}
-
-            {allTags.length > 0 && (
-              <select
-                value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-                className="px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white focus:outline-none focus:border-accent/50"
-              >
-                <option value="">All Tags</option>
-                {allTags.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            )}
-          </div>
+          <DiscoveryToolbar
+            lens="experiments"
+            q={searchQuery} onQChange={setSearchQuery}
+            sort={sortOrder} onSortChange={setSortOrder}
+            tag={tagFilter} onTagChange={setTagFilter}
+            template={templateFilter} onTemplateChange={setTemplateFilter}
+            searchPlaceholder="Search experiments..."
+          />
 
           {loading && (
             <div className="flex items-center justify-center py-16">

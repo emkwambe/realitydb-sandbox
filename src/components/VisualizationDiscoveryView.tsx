@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { fetchDiscovery } from '../services/discoveryService';
+import { fetchDiscovery, type DiscoverySort } from '../services/discoveryService';
 import { ChartFullscreenModal } from './ChartFullscreenModal';
+import { DiscoveryToolbar } from './DiscoveryToolbar';
 
 interface VizCard {
   id: string;
@@ -20,15 +21,19 @@ export function VisualizationDiscoveryView({ evidenceId }: { evidenceId: string 
   const [items, setItems] = useState<VizCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [tag, setTag] = useState('');
+  const [template, setTemplate] = useState('');
+  const [sort, setSort] = useState<DiscoverySort>('recent');
+  const [chartType, setChartType] = useState<'bar' | 'line' | 'pie' | ''>('');
   const [fullscreen, setFullscreen] = useState<VizCard | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    fetchDiscovery('visualizations', { q: q || undefined }).then((results) => {
+    fetchDiscovery('visualizations', { q: q || undefined, tag: tag || undefined, template: template || undefined, sort, chartType: chartType || undefined }).then((results) => {
       setItems(results as unknown as VizCard[]);
       setLoading(false);
     });
-  }, [q]);
+  }, [q, tag, template, sort, chartType]);
 
   // Deep link support: #discover/visualizations/<evidenceId> opens the
   // fullscreen modal directly once results have loaded.
@@ -40,14 +45,30 @@ export function VisualizationDiscoveryView({ evidenceId }: { evidenceId: string 
 
   return (
     <div>
-      <div className="mb-5">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search visualizations..."
-          className="w-full max-w-md px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
-        />
-      </div>
+      <DiscoveryToolbar
+        lens="visualizations"
+        q={q} onQChange={setQ}
+        sort={sort} onSortChange={setSort}
+        tag={tag} onTagChange={setTag}
+        template={template} onTemplateChange={setTemplate}
+        searchPlaceholder="Search visualizations..."
+        extra={
+          <div className="flex items-center gap-1">
+            {(['bar', 'line', 'pie'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setChartType(chartType === t ? '' : t)}
+                className={`px-2.5 py-2 text-sm rounded-lg border transition-colors ${
+                  chartType === t ? 'bg-accent/10 border-accent/40 text-accent' : 'border-[var(--border)] text-[var(--muted)] hover:text-white'
+                }`}
+                title={t}
+              >
+                {CHART_ICON[t]}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {loading && (
         <div className="flex items-center justify-center py-16">

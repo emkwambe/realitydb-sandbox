@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { fetchDiscovery } from '../services/discoveryService';
+import { fetchDiscovery, type DiscoverySort } from '../services/discoveryService';
 import { SqlBlock } from './ExperimentUI';
+import { DiscoveryToolbar } from './DiscoveryToolbar';
 
 interface SqlCard {
   id: string;
@@ -16,25 +17,28 @@ export function SqlDiscoveryView() {
   const [items, setItems] = useState<SqlCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [tag, setTag] = useState('');
+  const [template, setTemplate] = useState('');
+  const [sort, setSort] = useState<DiscoverySort>('recent');
 
   useEffect(() => {
     setLoading(true);
-    fetchDiscovery('sql', { q: q || undefined }).then((results) => {
+    fetchDiscovery('sql', { q: q || undefined, tag: tag || undefined, template: template || undefined, sort }).then((results) => {
       setItems(results as unknown as SqlCard[]);
       setLoading(false);
     });
-  }, [q]);
+  }, [q, tag, template, sort]);
 
   return (
     <div>
-      <div className="mb-5">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search SQL..."
-          className="w-full max-w-md px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
-        />
-      </div>
+      <DiscoveryToolbar
+        lens="sql"
+        q={q} onQChange={setQ}
+        sort={sort} onSortChange={setSort}
+        tag={tag} onTagChange={setTag}
+        template={template} onTemplateChange={setTemplate}
+        searchPlaceholder="Search SQL..."
+      />
 
       {loading && (
         <div className="flex items-center justify-center py-16">

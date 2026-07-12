@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { VisualizationDiscoveryView } from './VisualizationDiscoveryView';
 import { SqlDiscoveryView } from './SqlDiscoveryView';
 import { ProfilesDiscoveryView, PublicProfileView } from './PublicProfileView';
+import { DiscoveryLanding } from './DiscoveryLanding';
 
 export type DiscoverLens = 'experiments' | 'visualizations' | 'sql' | 'profiles' | 'dashboards' | 'notebooks' | 'organizations';
 
@@ -58,23 +59,27 @@ interface Props {
 }
 
 export function DiscoverPage({ lens, rest, onNavigate, onClose }: Props) {
-  // The Experiments lens hands off to the already-shipped Experiment
-  // Gallery/detail experience (#gallery route) instead of reimplementing
-  // it — same publication-quality page, no duplicated logic, and existing
-  // #gallery/<slug> links keep working unchanged.
+  // Opening a specific Experiment (#discover/experiments/<slug>) hands off
+  // to the already-shipped Experiment Gallery/detail experience (#gallery
+  // route) instead of reimplementing it — same publication-quality page,
+  // no duplicated logic, and existing #gallery/<slug> links keep working
+  // unchanged. Landing on the bare Experiments lens, though, shows a real
+  // entry point (Recommended/Trending) rather than redirecting away
+  // immediately — Discover is somewhere to arrive, not just a pass-through.
   useEffect(() => {
-    if (lens === 'experiments') {
-      window.location.hash = rest ? `#gallery/${encodeURIComponent(rest)}` : '#gallery';
+    if (lens === 'experiments' && rest) {
+      window.location.hash = `#gallery/${encodeURIComponent(rest)}`;
     }
   }, [lens, rest]);
 
-  if (lens === 'experiments') return null;
+  if (lens === 'experiments' && rest) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-bg flex flex-col">
       <DiscoverNav current={lens} onNavigate={(l) => onNavigate(l)} onClose={onClose} />
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto">
+          {lens === 'experiments' && <DiscoveryLanding />}
           {lens === 'visualizations' && <VisualizationDiscoveryView evidenceId={rest} />}
           {lens === 'sql' && <SqlDiscoveryView />}
           {lens === 'profiles' && (

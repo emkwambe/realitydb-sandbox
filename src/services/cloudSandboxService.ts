@@ -386,30 +386,6 @@ export async function getGalleryLab(slug: string): Promise<Record<string, unknow
 }
 
 /**
- * Browse published Experiments (the Experiment Gallery).
- */
-export async function browseExperiments(params?: {
-  tag?: string;
-  template?: string;
-  q?: string;
-}): Promise<Array<Record<string, unknown>>> {
-  try {
-    const searchParams = new URLSearchParams();
-    if (params?.tag) searchParams.set('tag', params.tag);
-    if (params?.template) searchParams.set('template', params.template);
-    if (params?.q) searchParams.set('q', params.q);
-
-    const url = `${LAB_API_URL}/v1/gallery/experiments${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.experiments ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
  * Get a single published Experiment (with full evidence) by slug.
  * Pass a verified accessToken to view non-public visibility the caller
  * has access to, and to get back the caller's bookmark state / resolved

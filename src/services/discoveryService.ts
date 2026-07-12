@@ -7,12 +7,13 @@
 const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || 'https://realitydb-lab-api.eddy-078.workers.dev';
 
 export type DiscoveryLens = 'experiments' | 'visualizations' | 'sql' | 'profiles';
-export type DiscoverySort = 'recent' | 'most_reproduced' | 'most_validated' | 'most_reviewed';
+export type DiscoverySort = 'recent' | 'most_reproduced' | 'most_validated' | 'most_reviewed' | 'most_cited' | 'trending' | 'relevance';
 
 export interface DiscoveryParams {
   q?: string;
   tag?: string;
   template?: string;
+  chartType?: 'bar' | 'line' | 'pie';
   sort?: DiscoverySort;
   offset?: number;
 }
@@ -23,6 +24,7 @@ export async function fetchDiscovery(lens: DiscoveryLens, params?: DiscoveryPara
     if (params?.q) searchParams.set('q', params.q);
     if (params?.tag) searchParams.set('tag', params.tag);
     if (params?.template) searchParams.set('template', params.template);
+    if (params?.chartType) searchParams.set('chartType', params.chartType);
     if (params?.sort) searchParams.set('sort', params.sort);
     if (params?.offset) searchParams.set('offset', String(params.offset));
 
@@ -33,6 +35,55 @@ export async function fetchDiscovery(lens: DiscoveryLens, params?: DiscoveryPara
     return data.results ?? [];
   } catch {
     return [];
+  }
+}
+
+export interface Facet {
+  value: string;
+  count: number;
+}
+
+export interface DiscoveryFacets {
+  tags: Facet[];
+  templates: Facet[];
+  authors: Facet[];
+}
+
+const EMPTY_FACETS: DiscoveryFacets = { tags: [], templates: [], authors: [] };
+
+/**
+ * Distinct tag/template/author values (with counts) for a lens's published
+ * population — backs real filter dropdowns instead of deriving options
+ * from whatever page of results happened to already be loaded. Not
+ * supported for the profiles lens (no tags/template there).
+ */
+export async function fetchFacets(lens: DiscoveryLens): Promise<DiscoveryFacets> {
+  if (lens === 'profiles') return EMPTY_FACETS;
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/discover/facets?lens=${lens}`);
+    if (!res.ok) return EMPTY_FACETS;
+    const data = await res.json();
+    return { tags: data.tags ?? [], templates: data.templates ?? [], authors: data.authors ?? [] };
+  } catch {
+    return EMPTY_FACETS;
+  }
+}
+
+/**
+ * Personalized recommendations — derived from the signed-in user's own
+ * bookmark/reproduction affinity when accessToken is present; a sensible
+ * global (trending) default otherwise. Never throws either way.
+ */
+export async function fetchRecommended(accessToken?: string, limit = 10): Promise<{ personalized: boolean; results: Array<Record<string, unknown>> }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    const res = await fetch(`${LAB_API_URL}/v1/discover/recommended?limit=${limit}`, { headers });
+    if (!res.ok) return { personalized: false, results: [] };
+    const data = await res.json();
+    return { personalized: !!data.personalized, results: data.results ?? [] };
+  } catch {
+    return { personalized: false, results: [] };
   }
 }
 
