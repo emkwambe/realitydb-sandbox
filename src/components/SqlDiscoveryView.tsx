@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchDiscovery, type DiscoverySort } from '../services/discoveryService';
 import { SqlBlock } from './ExperimentUI';
 import { DiscoveryToolbar } from './DiscoveryToolbar';
+import { LoadingSpinner, EmptyState } from './StatusViews';
 
 interface SqlCard {
   id: string;
@@ -40,17 +41,10 @@ export function SqlDiscoveryView() {
         searchPlaceholder="Search SQL..."
       />
 
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-        </div>
-      )}
+      {loading && <LoadingSpinner />}
 
       {!loading && items.length === 0 && (
-        <div className="text-center py-16">
-          <h3 className="text-lg font-medium text-white mb-2">No SQL published yet</h3>
-          <p className="text-sm text-[var(--muted)]">Queries added to published Experiments will appear here.</p>
-        </div>
+        <EmptyState title="No SQL published yet" body="Queries added to published Experiments will appear here." />
       )}
 
       {!loading && items.length > 0 && (

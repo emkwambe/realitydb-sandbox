@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import { CredibilityBadges } from './ExperimentUI';
+import { LoadingSpinner, EmptyState as SharedEmptyState } from './StatusViews';
+import { getPublicProfile, updateUserProfile } from '../services/discoveryService';
 import {
   getMyExperiments,
   getMyBookmarks,
@@ -39,8 +41,15 @@ export function ProfilePage({ onClose, onOpenExperiment }: Props) {
   const [reviews, setReviews] = useState<Record<string, unknown>[]>([]);
   const [validations, setValidations] = useState<Record<string, unknown>[]>([]);
 
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [bio, setBio] = useState('');
+  const [researchInterests, setResearchInterests] = useState('');
+  const [expertiseTags, setExpertiseTags] = useState('');
+  const [featuredIds, setFeaturedIds] = useState<string[]>([]);
+  const [profileSaving, setProfileSaving] = useState(false);
+
   useEffect(() => {
-    if (!accessToken) { setShowAuth(true); setLoading(false); return; }
+    if (!accessToken || !user) { setShowAuth(true); setLoading(false); return; }
     setLoading(true);
     Promise.all([
       getMyExperiments(accessToken),
@@ -48,15 +57,39 @@ export function ProfilePage({ onClose, onOpenExperiment }: Props) {
       getMyReproductions(accessToken),
       getMyReviewsAuthored(accessToken),
       getMyValidations(accessToken),
-    ]).then(([exps, bm, repro, rev, val]) => {
+      getPublicProfile(user.id),
+    ]).then(([exps, bm, repro, rev, val, profile]) => {
       setExperiments(exps);
       setBookmarks(bm);
       setReproductions(repro);
       setReviews(rev);
       setValidations(val);
+      if (profile?.profile) {
+        setBio(profile.profile.bio || '');
+        setResearchInterests(profile.profile.researchInterests || '');
+        setExpertiseTags(profile.profile.expertiseTags || '');
+        setFeaturedIds(profile.profile.featured.map((f) => f.id));
+      }
       setLoading(false);
     });
   }, [accessToken]);
+
+  async function handleSaveProfile() {
+    if (!accessToken) return;
+    setProfileSaving(true);
+    const ok = await updateUserProfile(accessToken, {
+      bio: bio.trim(),
+      researchInterests: researchInterests.trim(),
+      expertiseTags: expertiseTags.trim(),
+      featuredExperimentIds: featuredIds,
+    });
+    setProfileSaving(false);
+    if (ok) setEditingProfile(false);
+  }
+
+  function toggleFeatured(id: string) {
+    setFeaturedIds((prev) => prev.includes(id) ? prev.filter((f) => f !== id) : prev.length >= 5 ? prev : [...prev, id]);
+  }
 
   const published = experiments.filter((e) => e.status === 'published');
   const drafts = experiments.filter((e) => e.status === 'draft');
@@ -132,6 +165,91 @@ export function ProfilePage({ onClose, onOpenExperiment }: Props) {
               </div>
             </div>
 
+            {/* Identity — About / Research Interests / Expertise / Featured.
+                Omitted entirely (no placeholder prompts) when not editing
+                and nothing has been set — same "no fake content" precedent
+                as the Discover layer's Coming Soon lenses. */}
+            <div className="border-b border-[var(--border)] pb-6 mb-6">
+              {!editingProfile ? (
+                <>
+                  {(bio || researchInterests || expertiseTags) && (
+                    <div className="space-y-3 mb-3">
+                      {bio && <p className="text-sm text-gray-200 leading-relaxed">{bio}</p>}
+                      {researchInterests && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">Research Interests</p>
+                          <p className="text-xs text-gray-300">{researchInterests}</p>
+                        </div>
+                      )}
+                      {expertiseTags && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {expertiseTags.split(',').map((t) => t.trim()).filter(Boolean).map((t) => (
+                            <span key={t} className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full">{t}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button onClick={() => setEditingProfile(true)} className="text-xs text-accent hover:underline">
+                    {bio || researchInterests || expertiseTags ? 'Edit profile' : 'Add a bio, research interests, and expertise tags'}
+                  </button>
+                </>
+              ) : (
+                <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4 space-y-3">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1 block">About</label>
+                    <textarea
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      placeholder="A short bio — who you are and what you work on."
+                      className="w-full min-h-[70px] px-3 py-2 bg-bg-elevated border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1 block">Research Interests</label>
+                    <input
+                      value={researchInterests}
+                      onChange={(e) => setResearchInterests(e.target.value)}
+                      placeholder="e.g. fraud detection, data quality, supply chain analytics"
+                      className="w-full px-3 py-2 bg-bg-elevated border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1 block">Expertise Tags</label>
+                    <input
+                      value={expertiseTags}
+                      onChange={(e) => setExpertiseTags(e.target.value)}
+                      placeholder="tags, comma, separated"
+                      className="w-full px-3 py-2 bg-bg-elevated border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
+                    />
+                  </div>
+                  {published.length > 0 && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1 block">Featured Experiments (up to 5)</label>
+                      <div className="space-y-1.5 max-h-40 overflow-auto">
+                        {published.map((e) => (
+                          <label key={e.id as string} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                            <input type="checkbox" checked={featuredIds.includes(e.id as string)} onChange={() => toggleFeatured(e.id as string)} />
+                            <span className="truncate">{e.title as string}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={handleSaveProfile}
+                      disabled={profileSaving}
+                      className="px-3 py-1.5 bg-accent text-black text-[11px] font-semibold rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                    >
+                      {profileSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={() => setEditingProfile(false)} className="text-[11px] text-[var(--muted)] hover:text-white">Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Tabs */}
             <div className="flex items-center gap-1 mb-5 overflow-x-auto">
               {TABS.map((t) => (
@@ -148,9 +266,7 @@ export function ProfilePage({ onClose, onOpenExperiment }: Props) {
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-              </div>
+              <LoadingSpinner />
             ) : (
               <div className="space-y-2">
                 {tab === 'published' && (
@@ -169,7 +285,7 @@ export function ProfilePage({ onClose, onOpenExperiment }: Props) {
                 )}
                 {tab === 'bookmarks' && (
                   bookmarks.length === 0
-                    ? <EmptyState text="Bookmark experiments from the Gallery to save them here." />
+                    ? <EmptyState text="Bookmark experiments from Discover to save them here." />
                     : bookmarks.map((e) => (
                       <ExperimentRow key={e.id as string} exp={e} onOpen={() => e.slug && onOpenExperiment(e.slug as string)} />
                     ))
@@ -228,11 +344,7 @@ export function ProfilePage({ onClose, onOpenExperiment }: Props) {
 }
 
 function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="text-center py-12">
-      <p className="text-sm text-[var(--muted)]">{text}</p>
-    </div>
-  );
+  return <SharedEmptyState title={text} />;
 }
 
 function ExperimentRow({ exp, onOpen, showBadges }: { exp: Record<string, unknown>; onOpen?: () => void; showBadges?: boolean }) {

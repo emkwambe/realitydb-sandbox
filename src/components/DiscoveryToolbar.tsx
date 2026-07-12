@@ -40,20 +40,20 @@ export function DiscoveryToolbar({ lens, q, onQChange, sort, onSortChange, tag, 
   }, [lens]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 mb-6">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 mb-6">
       <input
         type="text"
         value={q}
         onChange={(e) => onQChange(e.target.value)}
         placeholder={searchPlaceholder || 'Search...'}
-        className="flex-1 min-w-[200px] px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
+        className="w-full sm:flex-1 sm:min-w-[200px] px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white placeholder:text-[var(--muted)] focus:outline-none focus:border-accent/50"
       />
 
       {facets.templates.length > 0 && (
         <select
           value={template}
           onChange={(e) => onTemplateChange(e.target.value)}
-          className="px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white focus:outline-none focus:border-accent/50"
+          className="w-full sm:w-auto px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white focus:outline-none focus:border-accent/50"
         >
           <option value="">All Templates</option>
           {facets.templates.map((f) => (
@@ -66,7 +66,7 @@ export function DiscoveryToolbar({ lens, q, onQChange, sort, onSortChange, tag, 
         <select
           value={tag}
           onChange={(e) => onTagChange(e.target.value)}
-          className="px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white focus:outline-none focus:border-accent/50"
+          className="w-full sm:w-auto px-3 py-2 bg-bg-card border border-[var(--border)] rounded-lg text-sm text-white focus:outline-none focus:border-accent/50"
         >
           <option value="">All Tags</option>
           {facets.tags.map((f) => (

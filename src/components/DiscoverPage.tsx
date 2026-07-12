@@ -84,7 +84,7 @@ export function DiscoverPage({ lens, rest, onNavigate, onClose }: Props) {
           {lens === 'sql' && <SqlDiscoveryView />}
           {lens === 'profiles' && (
             rest
-              ? <PublicProfileView userId={rest} onOpenExperiment={(slug) => { window.location.hash = `#gallery/${slug}`; }} />
+              ? <PublicProfileView userId={rest} onOpenExperiment={(slug) => { window.location.hash = `#gallery/${slug}`; }} onOpenProfile={(uid) => onNavigate('profiles', uid)} />
               : <ProfilesDiscoveryView onOpenProfile={(userId) => onNavigate('profiles', userId)} />
           )}
           {(lens === 'dashboards' || lens === 'notebooks' || lens === 'organizations') && (

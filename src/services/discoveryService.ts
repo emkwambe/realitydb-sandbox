@@ -5,6 +5,7 @@
 // not writing a new fetch per lens.
 
 const LAB_API_URL = import.meta.env.VITE_LAB_API_URL || 'https://realitydb-lab-api.eddy-078.workers.dev';
+const LAB_API_KEY = import.meta.env.VITE_LAB_API_KEY;
 
 export type DiscoveryLens = 'experiments' | 'visualizations' | 'sql' | 'profiles';
 export type DiscoverySort = 'recent' | 'most_reproduced' | 'most_validated' | 'most_reviewed' | 'most_cited' | 'trending' | 'relevance';
@@ -87,6 +88,13 @@ export async function fetchRecommended(accessToken?: string, limit = 10): Promis
   }
 }
 
+export interface ProfileIdentity {
+  bio: string | null;
+  researchInterests: string | null;
+  expertiseTags: string | null;
+  featured: Array<{ id: string; slug: string; title: string; question: string | null }>;
+}
+
 export interface PublicProfile {
   userId: string;
   published_count: number;
@@ -97,6 +105,25 @@ export interface PublicProfile {
     review_count: number;
   };
   experiments: Array<Record<string, unknown>>;
+  profile: ProfileIdentity | null;
+}
+
+/**
+ * Self-authored profile identity — bio/research interests/expertise/
+ * featured Experiments. Self-only write, derived from the verified JWT
+ * server-side (no :userId param exists on the endpoint).
+ */
+export async function updateUserProfile(accessToken: string, fields: { bio?: string; researchInterests?: string; expertiseTags?: string; featuredExperimentIds?: string[] }): Promise<boolean> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': LAB_API_KEY, Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(fields),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 export async function getPublicProfile(userId: string): Promise<PublicProfile | null> {

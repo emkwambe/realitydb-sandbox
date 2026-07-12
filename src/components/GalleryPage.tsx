@@ -4,11 +4,14 @@ import AuthModal from './AuthModal';
 import { CredibilityBadges, SqlBlock, ResultTable, PublicationMarkdown, EvidenceChart, type CredibilityCounts } from './ExperimentUI';
 import { fetchDiscovery, type DiscoverySort } from '../services/discoveryService';
 import { DiscoveryToolbar } from './DiscoveryToolbar';
+import { Breadcrumbs } from './Breadcrumbs';
+import { LoadingSpinner, EmptyState, NotFoundState } from './StatusViews';
 import {
   getExperiment,
   forkExperiment,
   setExperimentBookmark,
   submitReproduction,
+  getExperimentReproductions,
   getExperimentReviews,
   submitExperimentReview,
   withdrawExperimentReview,
@@ -80,6 +83,22 @@ interface ReferenceItem {
   other_slug: string | null;
 }
 
+interface ReproductionItem {
+  id: string;
+  user_id: string;
+  matched: number;
+  notes: string | null;
+  created_at: string;
+}
+
+interface RelatedVizItem {
+  id: string;
+  title: string | null;
+  data: string;
+  experiment_slug: string;
+  experiment_title: string;
+}
+
 function estimateReadingTime(detail: ExperimentDetail): number {
   const text = [detail.findings, detail.key_findings, detail.limitations, detail.future_work].filter(Boolean).join(' ');
   const words = text.trim().split(/\s+/).filter(Boolean).length;
@@ -100,10 +119,10 @@ function formatCitations(detail: ExperimentDetail): { bibtex: string; apa: strin
   return { bibtex, apa, mla };
 }
 
-function EvidenceChartView({ block, evidence }: { block: EvidenceBlock; evidence: EvidenceBlock[] }) {
+function EvidenceChartView({ block, evidence, height }: { block: EvidenceBlock; evidence: EvidenceBlock[]; height?: number }) {
   const source = evidence.find((e) => e.id === block.data.sourceEvidenceId);
   const { chartType, xKey, yKey } = block.data;
-  return <EvidenceChart chartType={chartType} xKey={xKey} yKey={yKey} rows={source?.data?.rows} />;
+  return <EvidenceChart chartType={chartType} xKey={xKey} yKey={yKey} rows={source?.data?.rows} height={height} />;
 }
 
 export function GalleryPage({ onClose, slug }: Props) {
@@ -139,6 +158,8 @@ export function GalleryPage({ onClose, slug }: Props) {
   const [reviewError, setReviewError] = useState('');
 
   const [related, setRelated] = useState<ExperimentSummary[]>([]);
+  const [relatedViz, setRelatedViz] = useState<RelatedVizItem[]>([]);
+  const [reproductions, setReproductions] = useState<ReproductionItem[]>([]);
   const [references, setReferences] = useState<{ citedBy: ReferenceItem[]; cites: ReferenceItem[] }>({ citedBy: [], cites: [] });
   const [citeExpanded, setCiteExpanded] = useState<'bibtex' | 'apa' | 'mla' | null>(null);
   const [citeTargetSlug, setCiteTargetSlug] = useState('');
@@ -161,14 +182,22 @@ export function GalleryPage({ onClose, slug }: Props) {
     if (!exp) { setDetailError('Experiment not found — it may have been unpublished.'); setDetailLoading(false); return; }
     setDetail(exp as unknown as ExperimentDetail);
     setDetailLoading(false);
-    const [rev, rel, refs] = await Promise.all([
+    const expTyped = exp as unknown as ExperimentDetail;
+    const [rev, rel, refs, repros, viz] = await Promise.all([
       getExperimentReviews(slug, accessToken),
       getRelatedExperiments(slug),
-      getExperimentReferences(exp.id as string, accessToken),
+      getExperimentReferences(expTyped.id, accessToken),
+      getExperimentReproductions(expTyped.id, accessToken),
+      fetchDiscovery('visualizations', { template: expTyped.template || undefined, tag: (expTyped.tags || '').split(',')[0]?.trim() || undefined }),
     ]);
     setReviews(rev as unknown as ReviewItem[]);
     setRelated(rel as unknown as ExperimentSummary[]);
     setReferences(refs as unknown as { citedBy: ReferenceItem[]; cites: ReferenceItem[] });
+    setReproductions(repros as unknown as ReproductionItem[]);
+    // Exclude this Experiment's own charts — "related visualizations" means
+    // work from elsewhere in the catalog, not a duplicate of what's already
+    // shown as the hero/methodology evidence on this same page.
+    setRelatedViz((viz as unknown as RelatedVizItem[]).filter((v) => v.experiment_slug !== slug).slice(0, 4));
   }
 
   useEffect(() => {
@@ -189,7 +218,11 @@ export function GalleryPage({ onClose, slug }: Props) {
     if (!requireAuth() || !detail || !accessToken || reproMatched === null) return;
     setReproSubmitting(true);
     const ok = await submitReproduction(detail.id, accessToken, reproMatched, reproNotes.trim() || undefined);
-    if (ok) setReproSubmitted(true);
+    if (ok) {
+      setReproSubmitted(true);
+      const repros = await getExperimentReproductions(detail.id, accessToken);
+      setReproductions(repros as unknown as ReproductionItem[]);
+    }
     setReproSubmitting(false);
   }
 
@@ -289,7 +322,7 @@ export function GalleryPage({ onClose, slug }: Props) {
     <div className="fixed inset-0 z-50 bg-bg flex flex-col">
       {/* Header */}
       <div className="h-12 border-b border-[var(--border)] bg-bg-elevated flex items-center px-4 gap-3 shrink-0">
-        <span className="text-accent font-bold">Experiment Gallery</span>
+        <span className="text-accent font-bold">Published Experiments</span>
         <span className="text-[var(--muted)] text-sm">Published analytical work — evidence, findings, and reproducible investigations</span>
         <span className="ml-auto">
           <button onClick={onClose} className="text-xs text-[var(--muted)] hover:text-white">Close</button>
@@ -302,23 +335,26 @@ export function GalleryPage({ onClose, slug }: Props) {
           {/* ── DETAIL VIEW ─────────────────────────────────────────── */}
           {slug && (
             <div>
+              <Breadcrumbs items={[
+                { label: 'Discover', href: '#discover/experiments' },
+                { label: 'Experiments', href: '#gallery' },
+                { label: detail?.title || 'Experiment' },
+              ]} />
               <button onClick={onClose} className="text-xs text-[var(--muted)] hover:text-white mb-4">
-                &larr; Back to gallery
+                &larr; Back
               </button>
 
-              {detailLoading && (
-                <div className="flex items-center justify-center py-16">
-                  <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-                </div>
-              )}
+              {detailLoading && <LoadingSpinner />}
 
               {!detailLoading && detailError && (
-                <div className="text-center py-16">
-                  <h3 className="text-lg font-medium text-white mb-2">{detailError}</h3>
-                </div>
+                <NotFoundState title={detailError} />
               )}
 
-              {!detailLoading && detail && (
+              {!detailLoading && detail && (() => {
+                const nonResultEvidence = detail.evidence.filter((e) => e.type !== 'result_table');
+                const heroChart = nonResultEvidence.find((e) => e.type === 'chart') || null;
+                const methodologyEvidence = nonResultEvidence.filter((e) => e.id !== heroChart?.id);
+                return (
                 <article className="space-y-8">
                   {/* Masthead */}
                   <header className="border-b border-[var(--border)] pb-6">
@@ -327,7 +363,7 @@ export function GalleryPage({ onClose, slug }: Props) {
                       <span className="text-[10px] text-[var(--muted)]">&middot;</span>
                       <span className="text-[10px] uppercase tracking-wider text-[var(--muted)]">{detail.template}</span>
                     </div>
-                    <h1 className="text-[28px] leading-tight font-bold text-white mb-3 tracking-tight">{detail.title}</h1>
+                    <h1 className="text-[26px] sm:text-[28px] leading-tight font-bold text-white mb-3 tracking-tight">{detail.title}</h1>
                     {detail.question && <p className="text-[15px] text-gray-300 leading-relaxed mb-4 max-w-2xl">{detail.question}</p>}
 
                     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -357,6 +393,19 @@ export function GalleryPage({ onClose, slug }: Props) {
                     </div>
                   </header>
 
+                  {/* Hero Visualization — communicate visually before technically.
+                      Only the Experiment's headline chart, pulled out of the
+                      uniform evidence loop; absent entirely if there's no chart. */}
+                  {heroChart && (
+                    <section>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-xl p-6">
+                        {heroChart.title && <p className="text-base font-semibold text-white mb-1">{heroChart.title}</p>}
+                        {heroChart.data?.description && <p className="text-xs text-[var(--muted)] mb-4">{heroChart.data.description}</p>}
+                        <EvidenceChartView block={heroChart} evidence={detail.evidence} height={420} />
+                      </div>
+                    </section>
+                  )}
+
                   {/* Executive summary — lede pulled from findings, full text appears later */}
                   {detail.findings && (
                     <div className="bg-accent/5 border border-accent/20 rounded-xl px-6 py-5">
@@ -368,54 +417,16 @@ export function GalleryPage({ onClose, slug }: Props) {
                     </div>
                   )}
 
-                  {/* Environment / reproducibility manifest */}
-                  <section>
-                    <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2.5">Environment</p>
-                    <div className="flex flex-wrap gap-2 text-[11px]">
-                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">template: <span className="text-white">{detail.template}</span></span>
-                      {detail.seed != null && <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">seed: <span className="text-white">{detail.seed}</span></span>}
-                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">rows: <span className="text-white">{detail.rows?.toLocaleString()}</span></span>
-                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">engine: <span className="text-white">{detail.engine_version}</span></span>
-                    </div>
-                  </section>
-
-                  {/* Method + Evidence */}
-                  <section>
-                    <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Method &amp; Evidence</p>
-                    <div className="space-y-5">
-                      {detail.evidence.filter((e) => e.type !== 'result_table').map((e) => (
-                        <div key={e.id} className="bg-bg-card border border-[var(--border)] rounded-xl p-5">
-                          {e.type === 'sql_query' && (
-                            <>
-                              {e.title && <p className="text-[13px] font-semibold text-white mb-3">{e.title}</p>}
-                              <SqlBlock sql={e.data.sql} />
-                              {e.data.executionTimeMs != null && (
-                                <p className="text-[10px] text-[var(--muted)] mt-1.5">Executed in {e.data.executionTimeMs}ms</p>
-                              )}
-                              {(() => {
-                                const result = detail.evidence.find((r) => r.type === 'result_table' && r.data.sourceEvidenceId === e.id);
-                                if (!result) return null;
-                                return (
-                                  <div className="mt-4">
-                                    <ResultTable columns={result.data.columns} rows={result.data.rows} rowCount={result.data.rowCount} truncated={result.data.truncated} />
-                                  </div>
-                                );
-                              })()}
-                            </>
-                          )}
-                          {e.type === 'chart' && (
-                            <>
-                              {e.title && <p className="text-[13px] font-semibold text-white mb-3">{e.title}</p>}
-                              <EvidenceChartView block={e} evidence={detail.evidence} />
-                            </>
-                          )}
-                          {e.type === 'markdown' && (
-                            <PublicationMarkdown content={e.data.content} />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                  {/* Key Findings — promoted ahead of the full narrative so the
+                      headline takeaway isn't buried under "Findings & Conclusions." */}
+                  {detail.key_findings && (
+                    <section>
+                      <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Key Findings</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
+                        <PublicationMarkdown content={detail.key_findings} />
+                      </div>
+                    </section>
+                  )}
 
                   {/* Findings & Conclusions — full markdown */}
                   {detail.findings && (
@@ -427,16 +438,6 @@ export function GalleryPage({ onClose, slug }: Props) {
                     </section>
                   )}
 
-                  {/* Key Findings / Limitations / Future Work — optional structured
-                      sections, each omitted entirely when the author left it empty. */}
-                  {detail.key_findings && (
-                    <section>
-                      <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Key Findings</p>
-                      <div className="bg-bg-card border border-[var(--border)] rounded-xl px-6 py-5">
-                        <PublicationMarkdown content={detail.key_findings} />
-                      </div>
-                    </section>
-                  )}
                   {detail.limitations && (
                     <section>
                       <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Limitations</p>
@@ -453,6 +454,59 @@ export function GalleryPage({ onClose, slug }: Props) {
                       </div>
                     </section>
                   )}
+
+                  {/* Methodology — SQL becomes supporting evidence for the
+                      findings above, not the headline; de-emphasized heading,
+                      no longer competing visually with the hero chart. */}
+                  {methodologyEvidence.length > 0 && (
+                    <section>
+                      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-3">Methodology</p>
+                      <div className="space-y-5">
+                        {methodologyEvidence.map((e) => (
+                          <div key={e.id} className="bg-bg-card border border-[var(--border)] rounded-xl p-5">
+                            {e.type === 'sql_query' && (
+                              <>
+                                {e.title && <p className="text-[13px] font-semibold text-white mb-3">{e.title}</p>}
+                                <SqlBlock sql={e.data.sql} />
+                                {e.data.executionTimeMs != null && (
+                                  <p className="text-[10px] text-[var(--muted)] mt-1.5">Executed in {e.data.executionTimeMs}ms</p>
+                                )}
+                                {(() => {
+                                  const result = detail.evidence.find((r) => r.type === 'result_table' && r.data.sourceEvidenceId === e.id);
+                                  if (!result) return null;
+                                  return (
+                                    <div className="mt-4">
+                                      <ResultTable columns={result.data.columns} rows={result.data.rows} rowCount={result.data.rowCount} truncated={result.data.truncated} />
+                                    </div>
+                                  );
+                                })()}
+                              </>
+                            )}
+                            {e.type === 'chart' && (
+                              <>
+                                {e.title && <p className="text-[13px] font-semibold text-white mb-3">{e.title}</p>}
+                                <EvidenceChartView block={e} evidence={detail.evidence} />
+                              </>
+                            )}
+                            {e.type === 'markdown' && (
+                              <PublicationMarkdown content={e.data.content} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Environment / reproducibility manifest */}
+                  <section>
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2.5">Environment</p>
+                    <div className="flex flex-wrap gap-2 text-[11px]">
+                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">template: <span className="text-white">{detail.template}</span></span>
+                      {detail.seed != null && <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">seed: <span className="text-white">{detail.seed}</span></span>}
+                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">rows: <span className="text-white">{detail.rows?.toLocaleString()}</span></span>
+                      <span className="bg-bg-card border border-[var(--border)] px-2.5 py-1 rounded-md text-gray-300">engine: <span className="text-white">{detail.engine_version}</span></span>
+                    </div>
+                  </section>
 
                   {/* Tags */}
                   {detail.tags && (
@@ -534,6 +588,17 @@ export function GalleryPage({ onClose, slug }: Props) {
                         </>
                       )}
                     </div>
+                    {reproductions.length > 0 && (
+                      <div className="mt-3 space-y-1.5">
+                        {reproductions.map((r) => (
+                          <div key={r.id} className={`text-[11px] px-3 py-2 rounded-lg border-l-2 ${r.matched ? 'border-l-[#00e5a0] bg-[#00e5a0]/5' : 'border-l-red-400 bg-red-400/5'}`}>
+                            <span className={r.matched ? 'text-[#00e5a0]' : 'text-red-400'}>{r.matched ? '✓ Matched' : '✗ Different result'}</span>
+                            {r.notes && <span className="text-[var(--muted)]"> — {r.notes}</span>}
+                            <span className="text-[var(--muted)]"> · {new Date(r.created_at).toLocaleDateString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Peer Review */}
@@ -619,22 +684,61 @@ export function GalleryPage({ onClose, slug }: Props) {
                     )}
                   </div>
 
-                  {/* Related Experiments — same template/author/tag overlap */}
-                  {related.length > 0 && (
+                  {/* Continue Exploring — the "what's next" moment: the author's
+                      profile, same-template/tag/citation Experiments, and
+                      Visualizations from elsewhere in the catalog. Merged into
+                      one closing section rather than a disconnected mid-page
+                      block, per the unified-discovery-experience goal. */}
+                  {(related.length > 0 || relatedViz.length > 0 || detail.user_id) && (
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Related Experiments</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {related.map((r) => (
-                          <a
-                            key={r.id}
-                            href={`#gallery/${r.slug}`}
-                            className="bg-bg-card border border-[var(--border)] rounded-lg p-3 hover:border-accent/30 transition-colors"
-                          >
-                            <h4 className="text-xs font-medium text-white truncate">{r.title}</h4>
-                            {r.question && <p className="text-[11px] text-[var(--muted)] mt-0.5 line-clamp-2">{r.question}</p>}
-                            <div className="mt-2"><CredibilityBadges counts={r} compact /></div>
+                      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-2">Continue Exploring</p>
+                      <div className="bg-bg-card border border-[var(--border)] rounded-lg p-4 space-y-4">
+                        {detail.user_id && (
+                          <a href={`#discover/profiles/${detail.user_id}`} className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline">
+                            View {detail.authors || 'the author'}&rsquo;s profile &rarr;
                           </a>
-                        ))}
+                        )}
+
+                        {related.length > 0 && (
+                          <div>
+                            <p className="text-[10px] text-[var(--muted)] font-semibold mb-2">Related Experiments</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {related.map((r) => (
+                                <a
+                                  key={r.id}
+                                  href={`#gallery/${r.slug}`}
+                                  className="bg-bg-elevated border border-[var(--border)] rounded-lg p-3 hover:border-accent/30 transition-colors"
+                                >
+                                  <h4 className="text-xs font-medium text-white truncate">{r.title}</h4>
+                                  {r.question && <p className="text-[11px] text-[var(--muted)] mt-0.5 line-clamp-2">{r.question}</p>}
+                                  <div className="mt-2"><CredibilityBadges counts={r} compact /></div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {relatedViz.length > 0 && (
+                          <div>
+                            <p className="text-[10px] text-[var(--muted)] font-semibold mb-2">Related Visualizations</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {relatedViz.map((v) => (
+                                <a
+                                  key={v.id}
+                                  href={`#discover/visualizations/${v.id}`}
+                                  className="bg-bg-elevated border border-[var(--border)] rounded-lg p-3 hover:border-accent/30 transition-colors"
+                                >
+                                  <h4 className="text-xs font-medium text-white truncate">{v.title || 'Untitled visualization'}</h4>
+                                  <p className="text-[11px] text-[var(--muted)] mt-0.5 truncate">from {v.experiment_title}</p>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <a href="#discover/experiments" className="inline-block text-xs text-accent hover:underline">
+                          Browse all Experiments &rarr;
+                        </a>
                       </div>
                     </div>
                   )}
@@ -741,7 +845,8 @@ export function GalleryPage({ onClose, slug }: Props) {
                     </div>
                   </div>
                 </article>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -757,20 +862,13 @@ export function GalleryPage({ onClose, slug }: Props) {
             searchPlaceholder="Search experiments..."
           />
 
-          {loading && (
-            <div className="flex items-center justify-center py-16">
-              <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-            </div>
-          )}
+          {loading && <LoadingSpinner />}
 
           {!loading && experiments.length === 0 && (
-            <div className="text-center py-16">
-              <h3 className="text-lg font-medium text-white mb-2">No published experiments yet</h3>
-              <p className="text-sm text-[var(--muted)]">
-                Run analyses in SimLab and publish an Experiment to feature your work here.
-                {searchQuery || tagFilter || templateFilter ? ' Try adjusting your filters.' : ''}
-              </p>
-            </div>
+            <EmptyState
+              title="No published experiments yet"
+              body={`Run analyses in SimLab and publish an Experiment to feature your work here.${searchQuery || tagFilter || templateFilter ? ' Try adjusting your filters.' : ''}`}
+            />
           )}
 
           {!loading && experiments.length > 0 && (

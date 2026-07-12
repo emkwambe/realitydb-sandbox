@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchDiscovery, type DiscoverySort } from '../services/discoveryService';
 import { ChartFullscreenModal } from './ChartFullscreenModal';
 import { DiscoveryToolbar } from './DiscoveryToolbar';
+import { LoadingSpinner, EmptyState } from './StatusViews';
 
 interface VizCard {
   id: string;
@@ -70,17 +71,10 @@ export function VisualizationDiscoveryView({ evidenceId }: { evidenceId: string 
         }
       />
 
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-        </div>
-      )}
+      {loading && <LoadingSpinner />}
 
       {!loading && items.length === 0 && (
-        <div className="text-center py-16">
-          <h3 className="text-lg font-medium text-white mb-2">No visualizations published yet</h3>
-          <p className="text-sm text-[var(--muted)]">Charts added to published Experiments will appear here.</p>
-        </div>
+        <EmptyState title="No visualizations published yet" body="Charts added to published Experiments will appear here." />
       )}
 
       {!loading && items.length > 0 && (

@@ -461,7 +461,7 @@ export default function SimLab({ onClose, onGallery, accessToken, userEmail, onR
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Publish failed (${res.status})`, "error"); setPublishing(false); return; }
       setPublishResult(data);
-      fire("Published to gallery");
+      fire("Published");
     } catch (e) {
       fire(`Network error: ${e.message || e}`, "error");
     } finally {
@@ -921,7 +921,7 @@ workflows:
 
     {/* SNAPSHOT & PUBLISH */}
     {tab === "snapshot" && <div style={{ background: t.card, border: `0.5px solid ${t.border}`, borderRadius: 12, padding: 20 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Snapshot &amp; publish to gallery</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Snapshot &amp; publish</div>
       <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center" }}>
         <Label>Lab</Label>
         <select style={selectStyle} value={selectedLabId} onChange={(e) => setSelectedLabId(e.target.value)} disabled={sandboxes.length === 0}>
@@ -949,7 +949,7 @@ workflows:
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={handleSaveSnapshot} disabled={snapSaving || sandboxes.length === 0} style={{ ...btnPrimary, opacity: (snapSaving || sandboxes.length === 0) ? 0.6 : 1, cursor: snapSaving ? "wait" : "pointer" }}>{snapSaving ? "Saving…" : "Save Snapshot"}</button>
         {snapResult && (
-          <button onClick={handlePublish} disabled={publishing || !!publishResult} style={{ ...btnPrimary, background: t.info, color: dark ? "#0a0f1a" : "#fff", opacity: (publishing || !!publishResult) ? 0.6 : 1, cursor: publishing ? "wait" : "pointer" }}>{publishing ? "Publishing…" : publishResult ? "Published" : "Publish to Gallery ↗"}</button>
+          <button onClick={handlePublish} disabled={publishing || !!publishResult} style={{ ...btnPrimary, background: t.info, color: dark ? "#0a0f1a" : "#fff", opacity: (publishing || !!publishResult) ? 0.6 : 1, cursor: publishing ? "wait" : "pointer" }}>{publishing ? "Publishing…" : publishResult ? "Published" : "Publish Experiment ↗"}</button>
         )}
       </div>
 
@@ -965,10 +965,10 @@ workflows:
 
       {publishResult && (
         <div style={{ background: t.surface, border: `0.5px solid ${t.info}`, borderRadius: 8, padding: 12 }}>
-          <div style={{ fontSize: 12, color: t.info, fontWeight: 600, marginBottom: 6 }}>✓ Published to gallery</div>
+          <div style={{ fontSize: 12, color: t.info, fontWeight: 600, marginBottom: 6 }}>✓ Published</div>
           {publishResult.slug && (
             <button onClick={() => { onClose?.(); onGallery?.(); }} style={{ fontSize: 12, color: t.info, fontFamily: "'IBM Plex Mono', monospace", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              View in gallery →
+              View in Discover →
             </button>
           )}
         </div>

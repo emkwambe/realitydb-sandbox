@@ -179,7 +179,7 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { fire(data.error || `Publish failed (${res.status})`, "error"); setPublishing(false); return; }
       setPublishResult(data);
-      fire("Experiment published to gallery");
+      fire("Experiment published");
     } catch (e) {
       fire(`Network error: ${e.message || e}`, "error");
     } finally {
@@ -347,11 +347,11 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
           <div style={{ display: "flex", gap: 10 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: t.text, cursor: "pointer" }}>
               <input type="radio" name="visibility" checked={visibility === "unlisted"} onChange={() => setVisibility("unlisted")} />
-              Unlisted — shareable via link, not listed in the gallery
+              Unlisted — shareable via link, not listed in Discover
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: t.text, cursor: "pointer" }}>
               <input type="radio" name="visibility" checked={visibility === "public"} onChange={() => setVisibility("public")} />
-              Public — listed in the Experiment Gallery
+              Public — listed in Discover
             </label>
           </div>
           <p style={{ fontSize: 10, color: t.hint, marginTop: 8 }}>
@@ -369,10 +369,10 @@ export default function ExperimentBuilder({ selectedLab, accessToken, userEmail,
   // ── Step 3: published ────────────────────────────────────────────────────
   return (
     <div style={{ ...sectionStyle, border: `0.5px solid ${t.info}` }}>
-      <div style={{ fontSize: 13, color: t.info, fontWeight: 600, marginBottom: 4 }}>✓ Published to the Experiment Gallery</div>
+      <div style={{ fontSize: 13, color: t.info, fontWeight: 600, marginBottom: 4 }}>✓ Published</div>
       <div style={{ fontSize: 10, color: t.hint, marginBottom: 8 }}>Visibility: {publishResult.visibility}</div>
       <a href={`#gallery/${publishResult.slug}`} style={{ fontSize: 12, color: t.info, textDecoration: "underline" }}>
-        View in gallery →
+        View in Discover →
       </a>
     </div>
   );

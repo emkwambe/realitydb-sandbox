@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getExperiment } from '../services/cloudSandboxService';
 import { EvidenceChart } from './ExperimentUI';
+import { LoadingSpinner } from './StatusViews';
 
 interface Props {
   evidenceId: string;
@@ -94,11 +95,7 @@ export function ChartFullscreenModal({ evidenceId, experimentSlug, title, onClos
           <button onClick={onClose} className="text-xs text-[var(--muted)] hover:text-white">Close</button>
         </div>
 
-        {loading && (
-          <div className="flex items-center justify-center py-16">
-            <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-          </div>
-        )}
+        {loading && <LoadingSpinner />}
 
         {!loading && chart && (
           <>

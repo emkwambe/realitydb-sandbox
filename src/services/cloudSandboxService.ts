@@ -526,6 +526,22 @@ export async function submitReproduction(experimentId: string, accessToken: stri
 }
 
 /**
+ * List reproduction reports for an Experiment — was previously write-only
+ * from the frontend (submitReproduction existed, nothing ever read the
+ * list back), so others' reproduction reports were invisible.
+ */
+export async function getExperimentReproductions(experimentId: string, accessToken?: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    const res = await fetch(`${LAB_API_URL}/v1/experiments/${experimentId}/reproductions`, { headers: getExperimentHeaders(accessToken) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.reproductions ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * List structured peer reviews for an Experiment.
  */
 export async function getExperimentReviews(experimentId: string, accessToken?: string): Promise<Array<Record<string, unknown>>> {
