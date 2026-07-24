@@ -137,25 +137,35 @@ export function SimLabHomePage({ onNavigate }: Props) {
         <div className="relative mx-auto max-w-5xl px-6 pt-24 pb-20 text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-bg-elevated px-3 py-1 text-[11px] text-[var(--muted)] mb-6">
             <span className="h-1.5 w-1.5 rounded-full bg-green" />
-            An experimentation platform for data-intensive systems
+            Free tier — 5,000 rows, no credit card
           </span>
           <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight text-white md:text-5xl">
-            Production-realistic PostgreSQL{' '}
-            <span className="text-accent">laboratories for experimentation.</span>
+            Try a live database in 60 seconds.
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-[var(--muted)]">
-            Create isolated PostgreSQL environments populated with production-realistic
-            synthetic business data. Validate ideas, prototype applications, benchmark
-            pipelines, evaluate AI models, simulate business scenarios, and conduct
-            reproducible research — without exposing production data or spending hours
-            building environments.
+          <p className="mx-auto mt-4 text-2xl font-semibold text-accent">
+            Love it? Keep it.
           </p>
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-[var(--muted)]">
+            Realistic synthetic data for banking, healthcare, insurance, and more.
+            No real data. No setup. No risk.
+          </p>
+
+          {/* Terminal — the claim IS the pitch */}
+          <div className="mx-auto mt-8 max-w-lg rounded-lg border border-[var(--border)] bg-bg-elevated px-5 py-4 text-left font-mono text-[13px] leading-relaxed">
+            <div className="text-gray-200">
+              <span className="text-[var(--muted)]">$</span> rdb lab create us-banking --rows 5000
+            </div>
+            <div className="text-[var(--muted)]">→ Provisioning...</div>
+            <div className="text-green">✅ Live in 00:12</div>
+            <div className="text-accent">postgresql://...</div>
+          </div>
+
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={() => onNavigate('simlab')}
               className="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
             >
-              Launch a Lab <ArrowRight className="h-4 w-4" />
+              Claim a Free Database <ArrowRight className="h-4 w-4" />
             </button>
             <button
               onClick={() => onNavigate('data-store')}
@@ -164,6 +174,11 @@ export function SimLabHomePage({ onNavigate }: Props) {
               Explore Templates
             </button>
           </div>
+
+          {/* Free tier callout */}
+          <p className="mx-auto mt-5 text-[13px] text-[var(--muted)]">
+            Free tier includes 5,000 rows and a 30-minute lab — no signup required to start.
+          </p>
         </div>
       </section>
 
